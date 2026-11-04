@@ -1,24 +1,19 @@
 import SwiftUI
 
-/// Confirms removing a speech model: states the space freed and that transcripts are kept. Escape cancels.
+/// Confirms removing a speech model: states the space freed, that transcripts are kept and what happens to the
+/// selection.
+/// Escape cancels.
 struct RemoveModelSheet: View {
-    let model: SpeechModel
+    let request: ModelSettingsViewModel.RemovalRequest
     let cancel: () -> Void
     let remove: () -> Void
 
     var body: some View {
         SettingsSheetContainer {
-            Text("Remove “\(model.name)”?")
+            Text("Remove “\(request.model.name)”?")
                 .font(.system(size: 13, weight: .bold))
                 .accessibilityAddTraits(.isHeader)
-            SheetMessage(
-                text: String(
-                    localized: """
-                        This frees \(SettingsFormat.size(megabytes: model.sizeMegabytes)) on this Mac. Transcripts \
-                        already made with this model are kept, and you can download it again at any time.
-                        """
-                )
-            )
+            SheetMessage(text: message)
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
                 Button("Cancel", action: cancel)
@@ -30,66 +25,26 @@ struct RemoveModelSheet: View {
             .padding(.top, 8)
         }
     }
-}
-
-/// Shown after choosing a new folder: new recordings go there, and existing ones move only on request.
-struct MoveRecordingsSheet: View {
-    let destination: StorageLocation
-    let current: StorageLocation
-    let recordingCount: Int
-    let recordingsMegabytes: Int
-    let cancel: () -> Void
-    let keepRecordings: () -> Void
-    let moveRecordings: () -> Void
-
-    var body: some View {
-        SettingsSheetContainer {
-            HStack(spacing: 10) {
-                IconView(.folder, size: 22)
-                    .foregroundStyle(VerbatimColor.accent)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Save new recordings to “\(destination.folderName)” on \(destination.volumeName)?")
-                        .font(.system(size: 13, weight: .bold))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(verbatim: "\(destination.path) · \(SettingsFormat.freeSpace(destination.freeBytes)) free")
-                        .font(.system(size: 11))
-                        .foregroundStyle(VerbatimColor.secondaryText)
-                }
-            }
-            SheetMessage(text: message)
-            HStack(spacing: 8) {
-                Button("Cancel", action: cancel)
-                    .buttonStyle(.verbatim(.secondary, size: .dialog))
-                    .keyboardShortcut(.cancelAction)
-                Spacer(minLength: 0)
-                Button("Don’t Move", action: keepRecordings)
-                    .buttonStyle(.verbatim(.secondary, size: .dialog))
-                Button("Move Recordings", action: moveRecordings)
-                    .buttonStyle(.verbatim(.accent, size: .dialog))
-                    .keyboardShortcut(.defaultAction)
-            }
-            .padding(.top, 8)
-        }
-    }
 
     private var message: String {
-        let size = SettingsFormat.size(megabytes: recordingsMegabytes)
-        return String(
-            localized: """
-                You can also move your \(recordingCount) existing recordings (\(size)). They’re copied first and \
-                removed from \(current.path) only after every file is verified. If you don’t move them, they stay \
-                where they are and remain in the Library.
-                """
-        )
+        let kept = String(localized: "Recordings and transcripts are kept, and you can download it again at any time.")
+        let freed = request.reclaimedBytes.map {
+            String(localized: "This frees about \(SettingsFormat.size(bytes: $0)) on this Mac.")
+        }
+        let selectionNote =
+            request.isSelected
+            ? String(localized: "It’s your selected model, so none will be selected until you choose another.")
+            : nil
+        return [freed, kept, selectionNote].compactMap { $0 }.joined(separator: " ")
     }
 }
 
 /// Third-party components and their licenses; each row opens the full text.
 struct LicensesSheet: View {
     let licenses: [ThirdPartyLicense]
-    let openLicense: (ThirdPartyLicense) -> Void
     let done: () -> Void
+
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         SettingsSheetContainer {
@@ -102,7 +57,9 @@ struct LicensesSheet: View {
                         GroupedDivider(leadingInset: 12)
                     }
                     Button {
-                        openLicense(license)
+                        if let url = license.url {
+                            openURL(url)
+                        }
                     } label: {
                         HStack(spacing: 10) {
                             Text(license.name)
@@ -118,7 +75,7 @@ struct LicensesSheet: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(LicenseRowButtonStyle())
-                    .accessibilityHint("Shows the full license text")
+                    .accessibilityHint("Opens the full license text in your browser")
                 }
             }
             .background(VerbatimColor.groupBackground, in: RoundedRectangle(cornerRadius: 8))

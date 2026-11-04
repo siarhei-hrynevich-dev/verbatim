@@ -1,7 +1,7 @@
 import Foundation
 
-/// Settings states that can be shown without real models, storage or updates, matching section “05 Settings” of
-/// the design.
+/// Settings states that can be shown with sample data and simulated downloads, matching section “05 Settings” of the
+/// design as far as the app implements it.
 ///
 /// Select one at launch with `-SettingsPreviewScenario <rawValue>`, which also opens the Settings window, from the
 /// Debug menu in Debug builds, or in SwiftUI previews.
@@ -9,15 +9,15 @@ enum SettingsPreviewScenario: String, CaseIterable, Identifiable, Sendable {
     case general
     case models
     case removeModel
+    case noModels
     case storage
-    case moveRecordings
     case about
     case licenses
 
     static let launchArgumentKey = "SettingsPreviewScenario"
 
     /// The design confirms removing Base.
-    static let sampleRemovedModelID: SpeechModel.ID = "base"
+    static let sampleRemovedModelID: SpeechModel.ID = "openai_whisper-base"
 
     var id: String {
         rawValue
@@ -28,8 +28,8 @@ enum SettingsPreviewScenario: String, CaseIterable, Identifiable, Sendable {
         case .general: "General"
         case .models: "AI Models"
         case .removeModel: "Remove Model"
+        case .noModels: "No Models Installed"
         case .storage: "Storage"
-        case .moveRecordings: "Change Location"
         case .about: "About"
         case .licenses: "Licenses"
         }
@@ -38,18 +38,9 @@ enum SettingsPreviewScenario: String, CaseIterable, Identifiable, Sendable {
     var tab: SettingsTab {
         switch self {
         case .general: .general
-        case .models, .removeModel: .models
-        case .storage, .moveRecordings: .storage
+        case .models, .removeModel, .noModels: .models
+        case .storage: .storage
         case .about, .licenses: .about
-        }
-    }
-
-    var sheet: SettingsSheet? {
-        switch self {
-        case .removeModel: .removeModel(Self.sampleRemovedModelID)
-        case .moveRecordings: .moveRecordings
-        case .licenses: .licenses
-        case .general, .models, .storage, .about: nil
         }
     }
 

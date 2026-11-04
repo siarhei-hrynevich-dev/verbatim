@@ -1,167 +1,223 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import Recorder
 
 @MainActor
 struct SettingsViewModelTests {
-    private func advance(_ viewModel: SettingsViewModel, until condition: () -> Bool) {
-        for _ in 0..<1_000 where !condition() {
-            viewModel.advanceSimulation()
-        }
-    }
-
-    @Test(arguments: [
-        (SettingsPreviewScenario.general, SettingsTab.general, nil),
-        (.models, .models, nil),
-        (.removeModel, .models, SettingsSheet.removeModel("base")),
-        (.storage, .storage, nil),
-        (.moveRecordings, .storage, .moveRecordings),
-        (.about, .about, nil),
-        (.licenses, .about, .licenses)
-    ])
-    func scenariosSelectTabAndSheet(scenario: SettingsPreviewScenario, tab: SettingsTab, sheet: SettingsSheet?) {
-        let viewModel = SettingsViewModel(scenario: scenario)
-
-        #expect(viewModel.selectedTab == tab)
-        #expect(viewModel.sheet == sheet)
+    private func makeViewModel(
+        repository: InMemorySettingsRepository = InMemorySettingsRepository(),
+        loginItem: FakeLoginItem = FakeLoginItem(),
+        systemActions: FakeSystemActions = FakeSystemActions(),
+        chooseFolder: @escaping @MainActor (URL) async -> Void = { _ in }
+    ) -> SettingsViewModel {
+        SettingsViewModel(
+            dependencies: SettingsViewModel.Dependencies(
+                preferences: AppPreferences(repository: repository),
+                loginItem: loginItem,
+                recordingsStorage: FakeRecordingsStorage(),
+                systemActions: systemActions,
+                modelManager: ModelManagerHarness(settings: repository).manager,
+                metadata: AppMetadata(version: "0.1.0", build: "7"),
+                chooseRecordingsFolder: chooseFolder
+            )
+        )
     }
 
     @Test func closeNoteFollowsTheMenuBarSetting() {
-        let viewModel = SettingsViewModel()
-        #expect(viewModel.closeBehaviorNote.hasPrefix("Verbatim stays in the menu bar and Dock."))
+        let viewModel = makeViewModel()
+        #expect(viewModel.closeBehaviorNote.contains("menu bar"))
 
         viewModel.showsMenuBarIcon = false
         #expect(viewModel.closeBehaviorNote.hasPrefix("Verbatim stays in the Dock."))
+        #expect(!viewModel.closeBehaviorNote.contains("menu bar"))
 
         viewModel.closeBehavior = .quit
         #expect(viewModel.closeBehaviorNote.hasPrefix("Verbatim quits when the window closes."))
     }
 
-    @Test func downloadProgressesThroughPreparingToInstalled() {
-        let viewModel = SettingsViewModel(scenario: .models)
+    @Test func preferencesAreSavedThroughTheRepository() {
+        let repository = InMemorySettingsRepository()
+        let viewModel = makeViewModel(repository: repository)
 
-        viewModel.download("tiny")
-        #expect(viewModel.state(of: "tiny") == .downloading(progress: 0))
+        viewModel.showsMenuBarIcon = false
+        viewModel.opensRecorderOnDockClick = false
+        viewModel.closeBehavior = .quit
 
-        viewModel.advanceSimulation()
-        guard case .downloading(let progress) = viewModel.state(of: "tiny") else {
-            Issue.record("Expected a download in progress")
+        #expect(
+            repository.loadSettings()
+                == AppSettings(showsMenuBarIcon: false, opensRecorderOnDockClick: false, closeBehavior: .quit)
+        )
+    }
+
+    @Test func loginItemStateComesFromTheSystem() {
+        let loginItem = FakeLoginItem()
+        let viewModel = makeViewModel(loginItem: loginItem)
+        viewModel.refreshLoginItemStatus()
+        #expect(!viewModel.launchesAtLogin)
+
+        viewModel.launchesAtLogin = true
+        #expect(viewModel.launchesAtLogin)
+        #expect(loginItem.current.withLock { $0 } == .enabled)
+
+        viewModel.launchesAtLogin = false
+        #expect(!viewModel.launchesAtLogin)
+    }
+
+    @Test func loginItemThatNeedsApprovalSaysSo() {
+        let loginItem = FakeLoginItem()
+        loginItem.current.withLock { $0 = .requiresApproval }
+        let viewModel = makeViewModel(loginItem: loginItem)
+
+        viewModel.refreshLoginItemStatus()
+
+        #expect(viewModel.launchesAtLogin)
+        #expect(viewModel.loginItemNote.contains("System Settings"))
+    }
+
+    @Test func failingToChangeTheLoginItemKeepsTheRealStateAndReports() {
+        let loginItem = FakeLoginItem()
+        loginItem.shouldFail.withLock { $0 = true }
+        let viewModel = makeViewModel(loginItem: loginItem)
+
+        viewModel.launchesAtLogin = true
+
+        #expect(!viewModel.launchesAtLogin)
+        #expect(viewModel.issue != nil)
+    }
+
+    @Test func storageComesFromTheRecordingsAndTheModels() async {
+        let viewModel = makeViewModel()
+
+        await viewModel.refreshStorage()
+
+        #expect(viewModel.recordingsStorage?.recordingCount == 3)
+        #expect(viewModel.totalBytes == 5_000)
+    }
+
+    @Test func choosingAFolderGoesThroughTheRecorderAndRefreshes() async throws {
+        let chosen = Mutex<URL?>(nil)
+        let viewModel = makeViewModel(chooseFolder: { url in chosen.withLock { $0 = url } })
+        let folder = URL(filePath: "/tmp/elsewhere", directoryHint: .isDirectory)
+
+        viewModel.chooseRecordingsFolder(folder)
+        for _ in 0..<500 where viewModel.recordingsStorage == nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+
+        #expect(chosen.withLock { $0 } == folder)
+        #expect(viewModel.recordingsStorage != nil)
+    }
+
+    @Test func aboutShowsTheInjectedMetadata() {
+        #expect(makeViewModel().metadata == AppMetadata(version: "0.1.0", build: "7"))
+    }
+
+    @Test func licensesOpenAndClose() {
+        let viewModel = makeViewModel()
+
+        viewModel.showLicenses()
+        #expect(viewModel.isShowingLicenses)
+
+        viewModel.dismissLicenses()
+        #expect(!viewModel.isShowingLicenses)
+    }
+
+    @Test func shippedLicensesAllLinkToTheirText() {
+        #expect(ThirdPartyLicense.shipped.allSatisfy { $0.url != nil })
+    }
+
+    // MARK: - Design scenarios
+
+    @Test(arguments: [
+        (SettingsPreviewScenario.general, SettingsTab.general, false),
+        (.models, .models, false),
+        (.removeModel, .models, false),
+        (.noModels, .models, false),
+        (.storage, .storage, false),
+        (.about, .about, false),
+        (.licenses, .about, true)
+    ])
+    func scenariosSelectTabAndSheet(scenario: SettingsPreviewScenario, tab: SettingsTab, showsLicenses: Bool) {
+        let viewModel = SettingsViewModel.preview(scenario)
+
+        #expect(viewModel.selectedTab == tab)
+        #expect(viewModel.isShowingLicenses == showsLicenses)
+    }
+
+    @Test func removeModelScenarioAsksAboutBase() async throws {
+        let viewModel = SettingsViewModel.preview(.removeModel)
+
+        for _ in 0..<500 where viewModel.models.removalRequest == nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+
+        #expect(viewModel.models.removalRequest?.model.id == SettingsPreviewScenario.sampleRemovedModelID)
+    }
+
+    @Test func modelsScenarioSimulatesADownloadOnSampleModels() async {
+        let viewModel = SettingsViewModel.preview(.models)
+
+        await viewModel.models.refresh()
+
+        let states = viewModel.models.rows.map(\.state)
+        #expect(states.contains { $0.isInstalled })
+        #expect(states.contains { $0.isInstalling })
+    }
+
+    @Test func noModelsScenarioShowsTheEmptyState() async {
+        let viewModel = SettingsViewModel.preview(.noModels)
+
+        await viewModel.models.refresh()
+
+        guard case .noModelInstalled = viewModel.models.notice else {
+            Issue.record("Expected the empty state")
             return
         }
-        #expect(progress > 0)
-
-        advance(viewModel) { viewModel.state(of: "tiny") == .installed }
-        #expect(viewModel.state(of: "tiny") == .installed)
     }
 
-    @Test func cancellingStopsDownloadingAndPreparing() {
-        let viewModel = SettingsViewModel(scenario: .models)
+    @Test func endingAPreviewReturnsToRealDependencies() {
+        let repository = InMemorySettingsRepository()
+        let viewModel = makeViewModel(repository: repository)
+        viewModel.showsMenuBarIcon = false
 
-        viewModel.cancelDownload("medium")
-        viewModel.cancelDownload("small")
-        viewModel.advanceSimulation()
+        viewModel.apply(.general)
+        #expect(viewModel.showsMenuBarIcon)
+        viewModel.showsMenuBarIcon = true
+        viewModel.closeBehavior = .quit
+        #expect(repository.loadSettings().closeBehavior == .keepRunning, "Scenarios must not touch saved preferences")
 
-        #expect(viewModel.state(of: "medium") == .notInstalled)
-        #expect(viewModel.state(of: "small") == .notInstalled)
-    }
-
-    @Test func defaultModelCannotBeRemovedUntilAnotherIsDefault() {
-        let viewModel = SettingsViewModel(scenario: .models)
-        #expect(!viewModel.canRemove("turbo"))
-
-        viewModel.requestRemoval(of: "turbo")
-        #expect(viewModel.sheet == nil)
-
-        viewModel.makeDefault("base")
-        #expect(viewModel.isDefault("base"))
-        #expect(viewModel.canRemove("turbo"))
-    }
-
-    @Test func confirmingRemovalUninstallsTheModel() {
-        let viewModel = SettingsViewModel(scenario: .removeModel)
-
-        viewModel.confirmRemoval(of: "base")
-
-        #expect(viewModel.state(of: "base") == .notInstalled)
-        #expect(viewModel.sheet == nil)
-        #expect(viewModel.unusedSpeechModel == nil)
-    }
-
-    @Test func searchIndexFinishesAndRebuilds() {
-        let viewModel = SettingsViewModel(scenario: .models)
-        #expect(viewModel.indexStatus == .indexing(indexed: 46, total: 48))
-
-        advance(viewModel) { viewModel.indexStatus == .upToDate }
-        #expect(viewModel.indexStatus == .upToDate)
-
-        viewModel.rebuildSearchIndex()
-        #expect(viewModel.indexStatus == .indexing(indexed: 0, total: 48))
-
-        viewModel.isSemanticSearchEnabled = false
-        #expect(viewModel.indexStatus == .off)
-        #expect(!viewModel.isSearchIndexAvailable)
-    }
-
-    @Test func removingTheEmbeddingModelWaitsForIt() {
-        let viewModel = SettingsViewModel(scenario: .models)
-
-        viewModel.removeEmbeddingModel()
-        #expect(viewModel.indexStatus == .waitingForModel)
-
-        viewModel.downloadEmbeddingModel()
-        advance(viewModel) { viewModel.embeddingState == .installed }
-        #expect(viewModel.embeddingState == .installed)
-    }
-
-    @Test func storageTotalsMatchTheDesign() {
-        let viewModel = SettingsViewModel(scenario: .storage)
-
-        #expect(SettingsFormat.size(megabytes: viewModel.modelsMegabytes) == SettingsFormat.size(megabytes: 1_860))
-        #expect(viewModel.cacheMegabytes == 410)
-        #expect(viewModel.totalMegabytes == 40_470)
-
-        viewModel.clearPreviewCache()
-        #expect(viewModel.cacheMegabytes == 186)
-    }
-
-    @Test func changingLocationUsesTheChosenFolder() {
-        let viewModel = SettingsViewModel(scenario: .moveRecordings)
-
-        viewModel.changeLocation(movingRecordings: false)
-
-        #expect(viewModel.location.volumeName == "Archive")
-        #expect(viewModel.sheet == nil)
-    }
-
-    @Test func updateCheckFinishesAfterASimulatedDelay() {
-        let viewModel = SettingsViewModel(scenario: .about)
-
-        viewModel.checkForUpdates()
-        #expect(viewModel.updateStatus == .checking)
-
-        advance(viewModel) { viewModel.updateStatus == .upToDate }
-        #expect(viewModel.updateStatus == .upToDate)
+        viewModel.endPreview()
+        #expect(!viewModel.showsMenuBarIcon)
     }
 }
 
 struct SettingsFormatTests {
-    @Test(arguments: [(75.0, "75 MB"), (570.0, "570 MB")])
-    func formatsMegabytes(megabytes: Double, expected: String) {
-        #expect(SettingsFormat.size(megabytes: megabytes) == expected)
+    @Test(arguments: [(Int64(75_000_000), "75 MB"), (570_000_000, "570 MB"), (0, "0 MB")])
+    func formatsMegabytes(bytes: Int64, expected: String) {
+        #expect(SettingsFormat.size(bytes: bytes) == expected)
     }
 
-    @Test func downloadCaptionSaysWhenLessThanAMinuteIsLeft() {
-        let caption = SettingsFormat.downloadCaption(progress: 0.38, sizeMegabytes: 1_500, secondsLeft: 31)
-
-        #expect(caption.hasPrefix("570 MB of "))
-        #expect(caption.hasSuffix("less than a minute left"))
+    @Test func formatsGigabytesWithOneDecimal() {
+        #expect(SettingsFormat.size(bytes: 1_638_000_000).hasSuffix(" GB"))
+        #expect(SettingsFormat.size(bytes: 1_638_000_000).hasPrefix("1"))
     }
 
-    @Test func downloadCaptionRoundsMinutes() {
-        let caption = SettingsFormat.downloadCaption(progress: 0, sizeMegabytes: 3_100, secondsLeft: 103)
+    @Test func downloadCaptionShowsBytesOfTotal() {
+        let caption = SettingsFormat.downloadCaption(
+            ModelDownloadProgress(completedBytes: 570_000_000, totalBytes: 800_000_000)
+        )
 
-        #expect(caption.hasSuffix("about 2 min left"))
+        #expect(caption == "570 MB of 800 MB")
+    }
+
+    @Test func downloadCaptionNeverExceedsTheTotal() {
+        let caption = SettingsFormat.downloadCaption(
+            ModelDownloadProgress(completedBytes: 900_000_000, totalBytes: 800_000_000)
+        )
+
+        #expect(caption == "800 MB of 800 MB")
     }
 }
 
@@ -174,5 +230,36 @@ struct SettingsPreviewScenarioTests {
 
         defaults.set("licenses", forKey: SettingsPreviewScenario.launchArgumentKey)
         #expect(SettingsPreviewScenario.fromLaunchArguments(defaults) == .licenses)
+    }
+}
+
+final class FakeLoginItem: LoginItemControlling {
+    let current = Mutex(LoginItemStatus.disabled)
+    let shouldFail = Mutex(false)
+
+    func status() -> LoginItemStatus {
+        current.withLock { $0 }
+    }
+
+    func setEnabled(_ isEnabled: Bool) throws {
+        if shouldFail.withLock({ $0 }) {
+            throw CocoaError(.featureUnsupported)
+        }
+        current.withLock { $0 = isEnabled ? .enabled : .disabled }
+    }
+}
+
+struct FakeRecordingsStorage: RecordingsStorageProviding {
+    func recordingsStorage() async throws -> RecordingsStorage {
+        RecordingsStorage(
+            location: RecordingLocation(
+                url: URL(filePath: "/tmp/recordings", directoryHint: .isDirectory),
+                displayPath: "~/Movies/Verbatim",
+                availableBytes: 1_000_000,
+                isAccessible: true
+            ),
+            recordingCount: 3,
+            usedBytes: 5_000
+        )
     }
 }

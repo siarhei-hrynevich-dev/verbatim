@@ -12,7 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModels = AppComposition.makeViewModels(
         recorderScenario: .fromLaunchArguments(),
         libraryScenario: .fromLaunchArguments(),
-        viewerScenario: .fromLaunchArguments()
+        viewerScenario: .fromLaunchArguments(),
+        settingsScenario: .fromLaunchArguments()
     )
     let navigator = WindowNavigator()
 
@@ -28,6 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewModels.viewer
     }
 
+    var settingsViewModel: SettingsViewModel {
+        viewModels.settings
+    }
+
     var viewerVideoSurface: AnyView {
         viewModels.viewerVideoSurface
     }
@@ -38,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var indicators: RecordingIndicators?
+    /// The Recorder closed with Quit selected while capture was busy, so quitting waits until the file is saved.
+    private var quitsWhenCaptureEnds = false
 
     /// Design states passed at launch open their windows, so each state can be reviewed directly.
     private static func launchRequests() -> [WindowNavigator.LaunchRequest] {
@@ -55,9 +62,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let indicators = RecordingIndicators(recorder: recorderViewModel, navigator: navigator)
+        let indicators = RecordingIndicators(
+            recorder: recorderViewModel,
+            navigator: navigator,
+            preferences: viewModels.preferences
+        )
         indicators.start()
         self.indicators = indicators
+        viewModels.recordingPriority.start()
+        // Reads metadata and file sizes only: no model is downloaded or loaded at launch.
+        let modelManager = viewModels.modelManager
+        Task {
+            await modelManager.reconcile()
+        }
+    }
+
+    // MARK: - Recorder window
+
+    func recorderWindowDidOpen() {
+        quitsWhenCaptureEnds = false
+    }
+
+    func recorderWindowDidClose() {
+        guard viewModels.preferences.settings.closeBehavior == .quit else {
+            return
+        }
+        quitsWhenCaptureEnds = true
+        quitOnceCaptureEnds()
+    }
+
+    private func quitOnceCaptureEnds() {
+        guard quitsWhenCaptureEnds else {
+            return
+        }
+        let isCaptureBusy = withObservationTracking {
+            recorderViewModel.isCaptureBusy
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.quitOnceCaptureEnds()
+            }
+        }
+        if !isCaptureBusy {
+            NSApp.terminate(nil)
+        }
     }
 
     /// Closing the Recorder window must never end a recording.
@@ -65,13 +112,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
-    /// A Dock click without open windows brings back the Recorder (with an active recording, if any), never the
-    /// Library.
+    /// A Dock click without open windows brings back the Recorder, or the Library if the user prefers. An active
+    /// recording always brings back the Recorder.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         guard !hasVisibleWindows else {
             return true
         }
-        navigator.showRecorder()
+        if viewModels.preferences.settings.opensRecorderOnDockClick || recorderViewModel.isCaptureBusy {
+            navigator.showRecorder()
+        } else {
+            navigator.showLibrary()
+        }
         return false
     }
 

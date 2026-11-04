@@ -230,17 +230,16 @@ final class RecorderViewModel {
         }
     }
 
-    func chooseFolder(_ url: URL) {
+    /// Finishes once the footer shows the new folder, for callers that show it too.
+    func useChosenFolder(_ url: URL) async {
         clearIssue()
-        Task {
-            do {
-                try await dependencies.storage.useFolder(url)
-            } catch {
-                Self.logger.error("Could not use the chosen folder: \(String(describing: error))")
-                actionIssue = .folderAccess(path: url.path(percentEncoded: false))
-            }
-            location = await dependencies.storage.currentLocation()
+        do {
+            try await dependencies.storage.useFolder(url)
+        } catch {
+            Self.logger.error("Could not use the chosen folder: \(String(describing: error))")
+            actionIssue = .folderAccess(path: url.path(percentEncoded: false))
         }
+        location = await dependencies.storage.currentLocation()
     }
 
     func folderSelectionFailed(_ error: any Error) {

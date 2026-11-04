@@ -34,6 +34,7 @@ struct WorkspaceSystemActions: SystemActions {
         case .screenRecording: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         case .microphone: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
         case .storage: "x-apple.systempreferences:com.apple.settings.Storage"
+        case .loginItems: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"
         }
     }
 }

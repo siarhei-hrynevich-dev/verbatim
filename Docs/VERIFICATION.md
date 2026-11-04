@@ -1,5 +1,37 @@
 # Verification
 
+## Settings and speech models
+
+Checked on 2026-11-04 on macOS 15 (Darwin 24.6.0, Mac16,12) with Xcode 26.3 and Swift 6.2.4, in addition to `make check` (415 tests, repeated four times without a failure).
+
+**Real components against the real Hugging Face Hub**, with an uncommitted test driving `ModelManager`, `WhisperModelProvider` and the JSON registry in a temporary folder, using Tiny, and Base for interruption:
+
+- Catalog: WhisperKit reports all four models supported on this Mac. Sizes from the Hub, with tokenizer: Tiny 79 MB, Base 149 MB, Small 489 MB, Large v3 Turbo 1.64 GB. `openai_whisper-medium` is in the repository but in no supported list of WhisperKit 1.1.1.
+- Download: 28 increasing byte-based progress samples, then verifying, then installed. Files laid out as documented.
+- A real network failure on an earlier attempt (timeouts, then offline) ended as `failed(.noNetwork)` and kept partial files.
+- Recording priority: pausing stopped writing, with partial bytes unchanged over time, and resuming continued past them.
+- Cancel: the transfer stopped, and the model's files, partial files and tokenizer were gone.
+- Restart, as new manager objects on the same disk and defaults: the model stayed installed, and the selection stayed selected.
+- The transcription contract: `WhisperKit` loaded the model and tokenizer from the resolved paths with downloads off and an unreachable Hub endpoint, confirming offline use. That load was only this check; the app never does it.
+- A truncated `tokenizer.json` was detected on restart as damaged, with the selected model shown as unavailable.
+- Removal: the model's files and tokenizer went, and the selection cleared. `config.json` and the registry stayed.
+
+**The running app**, an unsigned Debug build with a temporary home folder: launching creates no model files and downloads nothing. Settings opens at 620 pt. General shows real values, and AI Models shows the empty state from the real manager. Quitting works. The other tabs, in light appearance with sample data, were checked as rendered images.
+
+Found along the way and fixed:
+
+- A view's cancelled `.task` could cancel a disk check and mark healthy files as damaged. The checks now run in tasks the manager owns.
+- The install outcome could overtake its last phase event, which the state transition rules caught as an invalid `downloading → installed`.
+- A model removed externally stayed in the registry when its state was already `notInstalled`.
+
+### Not verified
+
+- **Clicking through Settings.** The session's screen was locked, so pointer and Accessibility actions could not reach windows, and only menu items worked. Download, Select, Remove, tab switching and alerts have not been used by hand in the running app; the same operations ran beneath the views as described above, and the view models have tests.
+- **Launch at Login, the Dock click, closing the Recorder with Quit selected, and hiding the menu bar item.** These depend on AppKit or the system and need a person. `SMAppService` also needs a signed build.
+- **The sandbox.** Builds here are unsigned. The `network.client` entitlement is present, but downloading and the container location need a signed build.
+- **Large v3 Turbo, Small and Base installs.** Only Tiny was installed in full. An M1 Mac, where Turbo shows as unsupported, was not available.
+- **Disk full and denied storage on a real volume.** Covered by tests through error translation and controllable failures.
+
 ## Player
 
 Checked on 2026-11-04 on macOS 15 (Darwin 24.6.0) with Xcode 26.3 and Swift 6.2.4, in addition to `make check`. The real app, in an unsigned Debug build and so outside the sandbox, ran against a temporary home folder holding a test database and copies of real recordings. It was driven with Accessibility actions and posted mouse events, and observed through window captures and `lsof`.

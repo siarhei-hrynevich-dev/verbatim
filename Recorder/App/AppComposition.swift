@@ -8,6 +8,11 @@ enum AppComposition {
         let recorder: RecorderViewModel
         let library: LibraryViewModel
         let viewer: ViewerViewModel
+        let settings: SettingsViewModel
+        let preferences: AppPreferences
+        let modelManager: ModelManager
+        /// Holds model work back while recording.
+        let recordingPriority: RecordingPriorityPolicy
         /// Renders the Viewer's video. Created here because it is the one view tied to the concrete player.
         let viewerVideoSurface: AnyView
     }
@@ -17,7 +22,8 @@ enum AppComposition {
     static func makeViewModels(
         recorderScenario: RecorderPreviewScenario?,
         libraryScenario: LibraryPreviewScenario?,
-        viewerScenario: ViewerPreviewScenario?
+        viewerScenario: ViewerPreviewScenario?,
+        settingsScenario: SettingsPreviewScenario?
     ) -> ViewModels {
         let engine = ScreenCaptureEngine()
         let permissions = SystemCapturePermissions()
@@ -36,7 +42,49 @@ enum AppComposition {
             metadataStore: store,
             library: library
         )
-        let recorder = RecorderViewModel(
+        let recorder = makeRecorder(
+            coordinator: coordinator,
+            engine: engine,
+            permissions: permissions,
+            store: store,
+            systemActions: systemActions
+        )
+        if let recorderScenario {
+            recorder.apply(recorderScenario)
+        }
+        let playback = AVPlaybackService()
+        let preferences = AppPreferences(repository: UserDefaultsSettingsRepository(defaults: .standard))
+        let modelManager = makeModelManager()
+        let settings = makeSettings(
+            library: library,
+            recorder: recorder,
+            systemActions: systemActions,
+            preferences: preferences,
+            modelManager: modelManager
+        )
+        if let settingsScenario {
+            settings.apply(settingsScenario)
+        }
+        return ViewModels(
+            recorder: recorder,
+            library: LibraryViewModel(service: library, previewScenario: libraryScenario),
+            viewer: ViewerViewModel(library: library, playback: playback, previewScenario: viewerScenario),
+            settings: settings,
+            preferences: preferences,
+            modelManager: modelManager,
+            recordingPriority: RecordingPriorityPolicy(coordinator: coordinator, models: modelManager),
+            viewerVideoSurface: AnyView(AVPlayerSurface(service: playback))
+        )
+    }
+
+    private static func makeRecorder(
+        coordinator: RecordingCoordinator,
+        engine: ScreenCaptureEngine,
+        permissions: SystemCapturePermissions,
+        store: FileRecordingStore,
+        systemActions: WorkspaceSystemActions
+    ) -> RecorderViewModel {
+        RecorderViewModel(
             dependencies: RecorderViewModel.Dependencies(
                 coordinator: coordinator,
                 sourceProvider: CaptureSourceDiscovery(),
@@ -47,15 +95,34 @@ enum AppComposition {
                 systemActions: systemActions
             )
         )
-        if let recorderScenario {
-            recorder.apply(recorderScenario)
-        }
-        let playback = AVPlaybackService()
-        return ViewModels(
-            recorder: recorder,
-            library: LibraryViewModel(service: library, previewScenario: libraryScenario),
-            viewer: ViewerViewModel(library: library, playback: playback, previewScenario: viewerScenario),
-            viewerVideoSurface: AnyView(AVPlayerSurface(service: playback))
+    }
+
+    private static func makeSettings(
+        library: LibraryService,
+        recorder: RecorderViewModel,
+        systemActions: any SystemActions,
+        preferences: AppPreferences,
+        modelManager: ModelManager
+    ) -> SettingsViewModel {
+        SettingsViewModel(
+            dependencies: SettingsViewModel.Dependencies(
+                preferences: preferences,
+                loginItem: SMAppServiceLoginItem(),
+                recordingsStorage: library,
+                systemActions: systemActions,
+                modelManager: modelManager,
+                metadata: AppMetadata(infoDictionary: Bundle.main.infoDictionary ?? [:]),
+                chooseRecordingsFolder: { await recorder.useChosenFolder($0) }
+            )
+        )
+    }
+
+    private static func makeModelManager() -> ModelManager {
+        let storage = WhisperModelProvider.defaultStorageLocation()
+        return ModelManager(
+            provider: WhisperModelProvider(storageLocation: storage),
+            registryStore: JSONModelRegistryStore(fileURL: JSONModelRegistryStore.defaultFileURL(in: storage)),
+            settings: UserDefaultsSettingsRepository(defaults: .standard)
         )
     }
 }

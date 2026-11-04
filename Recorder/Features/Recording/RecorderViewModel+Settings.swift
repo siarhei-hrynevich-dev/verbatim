@@ -2,6 +2,12 @@ import Foundation
 
 /// What follows from changing a setting: saving it, retiring stale failures and keeping the meters in step.
 extension RecorderViewModel {
+    func chooseFolder(_ url: URL) {
+        Task {
+            await useChosenFolder(url)
+        }
+    }
+
     /// A failure from the last attempt is stale once the user changes what would be recorded.
     func settingsDidChange(reloadsSources: Bool = false) {
         guard !preview.isActive else {

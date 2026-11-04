@@ -3,9 +3,6 @@ import SwiftUI
 @main
 struct RecorderApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var settingsViewModel = SettingsViewModel(
-        scenario: SettingsPreviewScenario.fromLaunchArguments() ?? .general
-    )
     @State private var accent = VerbatimAccent.fromLaunchArguments()
 
     var body: some Scene {
@@ -19,6 +16,8 @@ struct RecorderApp: App {
             )
             .verbatimAccent(accent)
             .installsNavigation(into: navigator)
+            .onAppear(perform: appDelegate.recorderWindowDidOpen)
+            .onDisappear(perform: appDelegate.recorderWindowDidClose)
         }
         .windowResizability(.contentSize)
         .windowToolbarStyle(.unified(showsTitle: false))
@@ -30,7 +29,7 @@ struct RecorderApp: App {
                     recorderViewModel: appDelegate.recorderViewModel,
                     libraryViewModel: appDelegate.libraryViewModel,
                     viewerViewModel: appDelegate.viewerViewModel,
-                    settingsViewModel: settingsViewModel,
+                    settingsViewModel: appDelegate.settingsViewModel,
                     accent: $accent
                 )
             #endif
@@ -72,7 +71,7 @@ struct RecorderApp: App {
 
         // Opened from the Recorder gear, the Library sidebar, the Dock menu or ⌘,.
         Settings {
-            SettingsWindowView(viewModel: settingsViewModel, accent: accent)
+            SettingsWindowView(viewModel: appDelegate.settingsViewModel, accent: accent)
         }
     }
 

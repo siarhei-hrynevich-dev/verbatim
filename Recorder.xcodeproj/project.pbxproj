@@ -21,7 +21,6 @@
 		47D93CEACE95F4A08DDC044F /* AVPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A77107944AF2E7C3FDCC35 /* AVPlaybackService.swift */; };
 		34FD552F2474A19235C256E9 /* PlaybackContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971B6B36BBE820F37003CD8D /* PlaybackContracts.swift */; };
 		55EA727022795E38278075FA /* Playback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FC71CE3FAEE76425815BDE8 /* Playback.swift */; };
-		00E912CB0D024BCE9793E760 /* SettingsViewModel+Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45694BC023FF2605643B4F29 /* SettingsViewModel+Models.swift */; };
 		01760AE5D770346793810CFF /* RecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62EFC574445983DFABA9125F /* RecorderViewModel.swift */; };
 		02EF3E68467A7E15EC5ED83F /* VerbatimButtonStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718C7139ABD8CBAC97AE3804 /* VerbatimButtonStyle.swift */; };
 		02F22301C2DE834C1E4347C1 /* ViewerRecording.swift in Sources */ = {isa = PBXBuildFile; fileRef = 600EEB83285F50717116D53B /* ViewerRecording.swift */; };
@@ -167,8 +166,31 @@
 		EF3B6287AFD6219671F1555E /* RecorderPreviewScenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0997D748F7EC74AFE8183D15 /* RecorderPreviewScenario.swift */; };
 		FA391164FAEC2DC2375EF498 /* LibraryTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BC3CC16BFD3253BC52E146A /* LibraryTestSupport.swift */; };
 		FB43331D994B26D978CB115A /* WindowNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED7C65221C7699B733B6BBD8 /* WindowNavigator.swift */; };
-		FEBD8DBA0ACC9BA08C5D23A6 /* ModelsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3496E4A1F929C03484E45DFA /* ModelsSettingsView.swift */; };
+		FEBD8DBA0ACC9BA08C5D23A6 /* ModelSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3496E4A1F929C03484E45DFA /* ModelSettingsView.swift */; };
 		FF2244E10F561272726CC8CF /* MediaFileWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57BB6BAC47BE676445FA107A /* MediaFileWriter.swift */; };
+		20658242B27C08562CF6D929 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38322148269593034D59440D /* AppSettings.swift */; };
+		B0ABBB304BA240D8D6AB75B0 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = E429B924D583E181217C59CD /* AppPreferences.swift */; };
+		80D703C031A07C7456F270AF /* ModelContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B86B47E4CB7C861824B512B3 /* ModelContracts.swift */; };
+		4D708536396266E75620928D /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BDA477D09FFEE24B8FDF6A5 /* ModelManager.swift */; };
+		76B8D4F9AE0692897EB5173D /* RecordingPriorityPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EDE6A415808378F402B4364 /* RecordingPriorityPolicy.swift */; };
+		D20A4601064098E74E5B399F /* SMAppServiceLoginItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C312F1FA83F877DE63EA3A8 /* SMAppServiceLoginItem.swift */; };
+		76140C65A6E767239370DF25 /* UserDefaultsSettingsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F23C2A326FCA7DD81B424DD6 /* UserDefaultsSettingsRepository.swift */; };
+		85E05A117C6462AD4FBA0B8E /* ModelSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC70FD9AA6435D5FED14502 /* ModelSettingsViewModel.swift */; };
+		4973AE8FD6904500846BFD3D /* ModelManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A6B8C037D675E27D936B657 /* ModelManagerTests.swift */; };
+		6969091AFBA7A194B5DDDD40 /* ModelManagerRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32DD3C0E1F6EF1850ACA9CAE /* ModelManagerRecoveryTests.swift */; };
+		F1B94D98E10D423063163248 /* ModelTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DC2AC0F17FDC260E9311DB /* ModelTestSupport.swift */; };
+		AC48D1AC31068733182DA2B8 /* ModelFileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2222A1FFC7EAF70BEBADC25 /* ModelFileStoreTests.swift */; };
+		81160832717DE96808C1C2B9 /* ModelSettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B7A85F4B97EC02B094F4557 /* ModelSettingsViewModelTests.swift */; };
+		CB8EA944704D4ED885CB6929 /* SettingsPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC8A0E42CF1E9C168034D72 /* SettingsPersistenceTests.swift */; };
+		9B4F1729CFD7D9805203DC1E /* HubModelManifestClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93A597B104581051735A4258 /* HubModelManifestClient.swift */; };
+		0F0BEF5C7F21E6199A230F1E /* JSONModelRegistryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B42084AEFCB21C121F49DD3F /* JSONModelRegistryStore.swift */; };
+		BBE2D2B6469CBCEEFC9FB6A5 /* ModelFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12B1A5A01D6D6EB4A191D168 /* ModelFileStore.swift */; };
+		445E1E715BC34298B6C216A0 /* WhisperModelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36BF68B47062E07EA04FC995 /* WhisperModelProvider.swift */; };
+		C4BD2DC39561B13908F73DE8 /* ModelInstallStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 146F3D63CE686CC06747EFF7 /* ModelInstallStateTests.swift */; };
+		AF716148B0C425271C0C3142 /* ModelIssue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A34AB280399202CCD423122 /* ModelIssue.swift */; };
+		766643114171D00C5A7FC428 /* ModelFileWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CB33FD9385EE157CE12CB87 /* ModelFileWorkflow.swift */; };
+		4E138B411EE70E9FA5D9122A /* ModelManager+Installing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B88385D83A85D890E0518D1 /* ModelManager+Installing.swift */; };
+		E3E058E9C6F298DD781A94E5 /* ModelSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 372B070B9FC3DE9FF8D3FFD3 /* ModelSelectionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -232,7 +254,7 @@
 		31439130CCA95DC9CAEDE52C /* RecordingDateSearch.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecordingDateSearch.swift; sourceTree = "<group>"; };
 		31DB9ABB6F88388334452246 /* ViewerWaveformView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ViewerWaveformView.swift; sourceTree = "<group>"; };
 		3452A7B677E5CF3A7653F80F /* SettingsOptions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsOptions.swift; sourceTree = "<group>"; };
-		3496E4A1F929C03484E45DFA /* ModelsSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelsSettingsView.swift; sourceTree = "<group>"; };
+		3496E4A1F929C03484E45DFA /* ModelSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelSettingsView.swift; sourceTree = "<group>"; };
 		350DBF923715B637477AE262 /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
 		3553C7A2CECB0BDC79AC07F8 /* RecordingCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecordingCoordinator.swift; sourceTree = "<group>"; };
 		38487652480D8BCD1A706A62 /* LiveCaptureSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveCaptureSession.swift; sourceTree = "<group>"; };
@@ -244,7 +266,6 @@
 		415F1C158D386E234A013AD0 /* LibraryContracts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LibraryContracts.swift; sourceTree = "<group>"; };
 		426D12579C367940B57BE037 /* LevelPreviewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LevelPreviewController.swift; sourceTree = "<group>"; };
 		452D2B32C8051E52554D8905 /* ViewerViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ViewerViewModel.swift; sourceTree = "<group>"; };
-		45694BC023FF2605643B4F29 /* SettingsViewModel+Models.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "SettingsViewModel+Models.swift"; sourceTree = "<group>"; };
 		45EE69F66F3CD75547FFA473 /* SwitchToggleStyle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SwitchToggleStyle.swift; sourceTree = "<group>"; };
 		488FDFA8125A69494A506BBA /* AudioSourcesSection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioSourcesSection.swift; sourceTree = "<group>"; };
 		492589F13FC40D93C1CF1954 /* LibraryPreviewData.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LibraryPreviewData.swift; sourceTree = "<group>"; };
@@ -342,6 +363,29 @@
 		FD71E42D5B838874D86FE2BD /* IconTile.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IconTile.swift; sourceTree = "<group>"; };
 		FDD513B6A073589F25561F35 /* RecordingCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecordingCoordinatorTests.swift; sourceTree = "<group>"; };
 		FE8064C127193282193F0693 /* ToolbarButtonStyle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ToolbarButtonStyle.swift; sourceTree = "<group>"; };
+		38322148269593034D59440D /* AppSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		E429B924D583E181217C59CD /* AppPreferences.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppPreferences.swift; sourceTree = "<group>"; };
+		B86B47E4CB7C861824B512B3 /* ModelContracts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelContracts.swift; sourceTree = "<group>"; };
+		1BDA477D09FFEE24B8FDF6A5 /* ModelManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
+		6EDE6A415808378F402B4364 /* RecordingPriorityPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecordingPriorityPolicy.swift; sourceTree = "<group>"; };
+		1C312F1FA83F877DE63EA3A8 /* SMAppServiceLoginItem.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SMAppServiceLoginItem.swift; sourceTree = "<group>"; };
+		F23C2A326FCA7DD81B424DD6 /* UserDefaultsSettingsRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UserDefaultsSettingsRepository.swift; sourceTree = "<group>"; };
+		AAC70FD9AA6435D5FED14502 /* ModelSettingsViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelSettingsViewModel.swift; sourceTree = "<group>"; };
+		0A6B8C037D675E27D936B657 /* ModelManagerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManagerTests.swift; sourceTree = "<group>"; };
+		32DD3C0E1F6EF1850ACA9CAE /* ModelManagerRecoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManagerRecoveryTests.swift; sourceTree = "<group>"; };
+		91DC2AC0F17FDC260E9311DB /* ModelTestSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelTestSupport.swift; sourceTree = "<group>"; };
+		B2222A1FFC7EAF70BEBADC25 /* ModelFileStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelFileStoreTests.swift; sourceTree = "<group>"; };
+		6B7A85F4B97EC02B094F4557 /* ModelSettingsViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelSettingsViewModelTests.swift; sourceTree = "<group>"; };
+		EEC8A0E42CF1E9C168034D72 /* SettingsPersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsPersistenceTests.swift; sourceTree = "<group>"; };
+		93A597B104581051735A4258 /* HubModelManifestClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HubModelManifestClient.swift; sourceTree = "<group>"; };
+		B42084AEFCB21C121F49DD3F /* JSONModelRegistryStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = JSONModelRegistryStore.swift; sourceTree = "<group>"; };
+		12B1A5A01D6D6EB4A191D168 /* ModelFileStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelFileStore.swift; sourceTree = "<group>"; };
+		36BF68B47062E07EA04FC995 /* WhisperModelProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WhisperModelProvider.swift; sourceTree = "<group>"; };
+		146F3D63CE686CC06747EFF7 /* ModelInstallStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelInstallStateTests.swift; sourceTree = "<group>"; };
+		2A34AB280399202CCD423122 /* ModelIssue.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelIssue.swift; sourceTree = "<group>"; };
+		2CB33FD9385EE157CE12CB87 /* ModelFileWorkflow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelFileWorkflow.swift; sourceTree = "<group>"; };
+		6B88385D83A85D890E0518D1 /* ModelManager+Installing.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "ModelManager+Installing.swift"; sourceTree = "<group>"; };
+		372B070B9FC3DE9FF8D3FFD3 /* ModelSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelSelectionTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -400,6 +444,8 @@
 				E03FC21BB2AF1447012EBEA5 /* RecordingClock.swift */,
 				BC6C49EB540768C876F5D754 /* LibraryRecording.swift */,
 				31439130CCA95DC9CAEDE52C /* RecordingDateSearch.swift */,
+				38322148269593034D59440D /* AppSettings.swift */,
+				16B7963776D4E5C818BD553C /* SpeechModel.swift */,
 			);
 			name = Models;
 			path = Models;
@@ -413,9 +459,21 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		8F67B8A45481163B45323DC5 /* SpeechModels */ = {
+			isa = PBXGroup;
+			children = (
+				93A597B104581051735A4258 /* HubModelManifestClient.swift */,
+				B42084AEFCB21C121F49DD3F /* JSONModelRegistryStore.swift */,
+				12B1A5A01D6D6EB4A191D168 /* ModelFileStore.swift */,
+				36BF68B47062E07EA04FC995 /* WhisperModelProvider.swift */,
+			);
+			path = SpeechModels;
+			sourceTree = "<group>";
+		};
 		31E87460CFF97AB9F83EE004 /* Infrastructure */ = {
 			isa = PBXGroup;
 			children = (
+				8F67B8A45481163B45323DC5 /* SpeechModels */,
 				760EE935789A95331953A7D9 /* Capture */,
 				42F0CD067159E63BE0C2F68B /* Storage */,
 				48F9AEB5514214D89929FFF4 /* System */,
@@ -431,6 +489,7 @@
 			children = (
 				C6ADA916FFE75C0DFB3BEC10 /* FileRecordingStore.swift */,
 				ECFBC3D52AAC0A5C6C33E403 /* UserDefaultsRecordingPreferencesStore.swift */,
+				F23C2A326FCA7DD81B424DD6 /* UserDefaultsSettingsRepository.swift */,
 				7A321372077E0FC854804AFB /* LocalRecordingFileStore.swift */,
 				3DD71B13EA84DD5B8234F778 /* MediaFileAccess.swift */,
 				123988F8F809EF55BEACA892 /* VideoThumbnailProvider.swift */,
@@ -444,6 +503,7 @@
 			children = (
 				E6D482723023D61EACB5EECA /* SystemCapturePermissions.swift */,
 				6369ED17F437470228DCC2F0 /* WorkspaceSystemActions.swift */,
+				1C312F1FA83F877DE63EA3A8 /* SMAppServiceLoginItem.swift */,
 			);
 			name = System;
 			path = System;
@@ -464,6 +524,14 @@
 				53121D8F4E1CA182FE07FE17 /* LibraryViewModelTests.swift */,
 				B970130F2E8B68551F1D826D /* RecordingMenusTests.swift */,
 				350DBF923715B637477AE262 /* SettingsViewModelTests.swift */,
+				0A6B8C037D675E27D936B657 /* ModelManagerTests.swift */,
+				372B070B9FC3DE9FF8D3FFD3 /* ModelSelectionTests.swift */,
+				146F3D63CE686CC06747EFF7 /* ModelInstallStateTests.swift */,
+				32DD3C0E1F6EF1850ACA9CAE /* ModelManagerRecoveryTests.swift */,
+				91DC2AC0F17FDC260E9311DB /* ModelTestSupport.swift */,
+				B2222A1FFC7EAF70BEBADC25 /* ModelFileStoreTests.swift */,
+				6B7A85F4B97EC02B094F4557 /* ModelSettingsViewModelTests.swift */,
+				EEC8A0E42CF1E9C168034D72 /* SettingsPersistenceTests.swift */,
 				A6C53967DB50D462623C87B1 /* ViewerViewModelTests.swift */,
 				F7744351910E4BD2087E930D /* MediaFileWriterTests.swift */,
 				B3864718015619BBB2040B25 /* RecordingConfigurationTests.swift */,
@@ -534,15 +602,15 @@
 			children = (
 				27AA9FDF937FB3A72D72DF58 /* AboutSettingsView.swift */,
 				66CFCBB09D5CA7B1F2469846 /* GeneralSettingsView.swift */,
-				3496E4A1F929C03484E45DFA /* ModelsSettingsView.swift */,
+				3496E4A1F929C03484E45DFA /* ModelSettingsView.swift */,
+				AAC70FD9AA6435D5FED14502 /* ModelSettingsViewModel.swift */,
+				2A34AB280399202CCD423122 /* ModelIssue.swift */,
 				B3E423D1BA44BA4A9E8D7CB6 /* SettingsComponents.swift */,
 				A5F991486CBFB7DEBA25E254 /* SettingsFormat.swift */,
 				3452A7B677E5CF3A7653F80F /* SettingsOptions.swift */,
 				50F5FE1C488D86DAA139BF0F /* SettingsSheets.swift */,
-				45694BC023FF2605643B4F29 /* SettingsViewModel+Models.swift */,
 				123C7DF3A73A1DB40375893D /* SettingsViewModel.swift */,
 				A57829F72B5316D899F570E2 /* SettingsWindowView.swift */,
-				16B7963776D4E5C818BD553C /* SpeechModel.swift */,
 				94ADAB53D03596CB1C52FB0C /* SpeechModelRow.swift */,
 				D29F85CCA995D2321DA9F756 /* StorageSettingsView.swift */,
 				619A0FE59863FC55219BBA37 /* Preview */,
@@ -625,6 +693,12 @@
 				04C522B2CA5A49578F7864E3 /* RecordingPreflight.swift */,
 				415F1C158D386E234A013AD0 /* LibraryContracts.swift */,
 				2A1949E9B612395F38F9C0B2 /* LibraryService.swift */,
+				E429B924D583E181217C59CD /* AppPreferences.swift */,
+				B86B47E4CB7C861824B512B3 /* ModelContracts.swift */,
+				1BDA477D09FFEE24B8FDF6A5 /* ModelManager.swift */,
+				6B88385D83A85D890E0518D1 /* ModelManager+Installing.swift */,
+				2CB33FD9385EE157CE12CB87 /* ModelFileWorkflow.swift */,
+				6EDE6A415808378F402B4364 /* RecordingPriorityPolicy.swift */,
 			);
 			name = Application;
 			path = Application;
@@ -916,12 +990,11 @@
 				FB43331D994B26D978CB115A /* WindowNavigator.swift in Sources */,
 				1A69C8ACB6AFF872301D37D1 /* AboutSettingsView.swift in Sources */,
 				6C11D863AEE72AE479DF49DA /* GeneralSettingsView.swift in Sources */,
-				FEBD8DBA0ACC9BA08C5D23A6 /* ModelsSettingsView.swift in Sources */,
+				FEBD8DBA0ACC9BA08C5D23A6 /* ModelSettingsView.swift in Sources */,
 				0977ACB6EA63102DF6B2E322 /* SettingsComponents.swift in Sources */,
 				4A5FDF8E4C0C4D255719C2B4 /* SettingsFormat.swift in Sources */,
 				2B0844DDA13530C28F991EED /* SettingsOptions.swift in Sources */,
 				0E7F3525A1064F0036AFCB27 /* SettingsSheets.swift in Sources */,
-				00E912CB0D024BCE9793E760 /* SettingsViewModel+Models.swift in Sources */,
 				AD049EF4D607384F8A5AF43A /* SettingsViewModel.swift in Sources */,
 				B3648A67B1FD0E236B1C939C /* SettingsWindowView.swift in Sources */,
 				3EFF6869DB87BF8A2DFEBC93 /* SpeechModel.swift in Sources */,
@@ -968,6 +1041,21 @@
 				DBFFB9334D84F90B8DB76DD3 /* RecorderViewModel+Settings.swift in Sources */,
 				877CCC27A2D2CD40CB36BC8E /* AudioSourceLevelMeter.swift in Sources */,
 				96DE6C794A0AD0DCE193604C /* LibraryContracts.swift in Sources */,
+				20658242B27C08562CF6D929 /* AppSettings.swift in Sources */,
+				B0ABBB304BA240D8D6AB75B0 /* AppPreferences.swift in Sources */,
+				80D703C031A07C7456F270AF /* ModelContracts.swift in Sources */,
+				4D708536396266E75620928D /* ModelManager.swift in Sources */,
+				4E138B411EE70E9FA5D9122A /* ModelManager+Installing.swift in Sources */,
+				766643114171D00C5A7FC428 /* ModelFileWorkflow.swift in Sources */,
+				76B8D4F9AE0692897EB5173D /* RecordingPriorityPolicy.swift in Sources */,
+				D20A4601064098E74E5B399F /* SMAppServiceLoginItem.swift in Sources */,
+				76140C65A6E767239370DF25 /* UserDefaultsSettingsRepository.swift in Sources */,
+				85E05A117C6462AD4FBA0B8E /* ModelSettingsViewModel.swift in Sources */,
+				AF716148B0C425271C0C3142 /* ModelIssue.swift in Sources */,
+				9B4F1729CFD7D9805203DC1E /* HubModelManifestClient.swift in Sources */,
+				0F0BEF5C7F21E6199A230F1E /* JSONModelRegistryStore.swift in Sources */,
+				BBE2D2B6469CBCEEFC9FB6A5 /* ModelFileStore.swift in Sources */,
+				445E1E715BC34298B6C216A0 /* WhisperModelProvider.swift in Sources */,
 				0721E4B316363DB22815BC9F /* LibraryService.swift in Sources */,
 				0D84365CE6431C731541CB24 /* LibraryIssue.swift in Sources */,
 				850F5157A1C8DE014BBEEDE0 /* RenameRecordingSheet.swift in Sources */,
@@ -1004,6 +1092,14 @@
 				E0F4283C9A96F13865C4CE56 /* LibraryViewModelTests.swift in Sources */,
 				7071BE5C1B92F3A53CADA695 /* RecordingMenusTests.swift in Sources */,
 				203264626267ACD46D0190E9 /* SettingsViewModelTests.swift in Sources */,
+				4973AE8FD6904500846BFD3D /* ModelManagerTests.swift in Sources */,
+				E3E058E9C6F298DD781A94E5 /* ModelSelectionTests.swift in Sources */,
+				C4BD2DC39561B13908F73DE8 /* ModelInstallStateTests.swift in Sources */,
+				6969091AFBA7A194B5DDDD40 /* ModelManagerRecoveryTests.swift in Sources */,
+				F1B94D98E10D423063163248 /* ModelTestSupport.swift in Sources */,
+				AC48D1AC31068733182DA2B8 /* ModelFileStoreTests.swift in Sources */,
+				81160832717DE96808C1C2B9 /* ModelSettingsViewModelTests.swift in Sources */,
+				CB8EA944704D4ED885CB6929 /* SettingsPersistenceTests.swift in Sources */,
 				3F158CE9EE5F99E937073D18 /* ViewerViewModelTests.swift in Sources */,
 				2F85F8508D1F065640ED80D6 /* MediaFileWriterTests.swift in Sources */,
 				2C4CF9CC2E5FB32AF10A8346 /* RecordingConfigurationTests.swift in Sources */,

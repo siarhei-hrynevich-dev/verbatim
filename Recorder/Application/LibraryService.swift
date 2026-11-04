@@ -199,3 +199,12 @@ final class LibraryService: FinishedRecordingRegistry {
 
     private static let logger = Logger(subsystem: "dev.local.Recorder", category: "Library")
 }
+
+extension LibraryService: RecordingsStorageProviding {
+    func recordingsStorage() async throws -> RecordingsStorage {
+        let location = await recordingsFolder()
+        let recordingCount = try await count(matching: RecordingQuery())
+        let usedBytes = try await totalFileSize()
+        return RecordingsStorage(location: location, recordingCount: recordingCount, usedBytes: usedBytes)
+    }
+}

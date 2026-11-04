@@ -54,6 +54,10 @@
                 }
 
                 Menu("Settings State") {
+                    Button("Live") {
+                        settingsViewModel.endPreview()
+                        openSettings()
+                    }
                     ForEach(SettingsPreviewScenario.allCases) { scenario in
                         Button(scenario.title) {
                             settingsViewModel.apply(scenario)

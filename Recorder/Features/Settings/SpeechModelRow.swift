@@ -1,57 +1,71 @@
 import SwiftUI
 
-/// One Whisper model: name, size, status chip and description, download progress while installing, and its
-/// actions. The default model keeps a faint accent tint, and its Remove button is disabled.
+/// One Whisper model: name, size, status chip and description, progress or failure while installing, and its actions.
+/// The selected model keeps a faint accent tint.
 struct SpeechModelRow: View {
-    let model: SpeechModel
-    let viewModel: SettingsViewModel
+    let row: ModelSettingsViewModel.Row
+    let viewModel: ModelSettingsViewModel
 
     var body: some View {
-        let state = viewModel.state(of: model.id)
-        let isDefault = viewModel.isDefault(model.id)
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
-                    Text(model.name)
+                    Text(row.model.name)
                         .font(.system(size: 13, weight: .semibold))
-                    Text(SettingsFormat.size(megabytes: model.sizeMegabytes))
-                        .font(.system(size: 12))
-                        .monospacedDigit()
-                        .foregroundStyle(VerbatimColor.secondaryText)
-                    chip(for: state, isDefault: isDefault)
+                    if let sizeBytes = row.sizeBytes {
+                        Text(SettingsFormat.size(bytes: sizeBytes))
+                            .font(.system(size: 12))
+                            .monospacedDigit()
+                            .foregroundStyle(VerbatimColor.secondaryText)
+                    }
+                    chip
                 }
-                Text(model.summary)
+                Text(row.model.summary)
                     .font(.system(size: 12))
                     .lineSpacing(1.5)
                     .foregroundStyle(VerbatimColor.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
-                progress(for: state)
+                caption(row.model.languageSupport)
+                progress
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            actions(for: state, isDefault: isDefault)
+            actions
         }
         .padding(.vertical, 11)
         .padding(.horizontal, 12)
-        .background(isDefault ? VerbatimColor.accent.opacity(0.06) : .clear)
+        .background(row.isSelected ? VerbatimColor.accent.opacity(0.06) : .clear)
         .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
-    private func chip(for state: ModelInstallState, isDefault: Bool) -> some View {
-        switch state {
-        case .installed where isDefault:
-            ModelStatusChip(title: String(localized: "Default"), icon: .check, iconColor: .white, style: .prominent)
+    private var chip: some View {
+        switch row.state {
+        case .installed where row.isSelected:
+            ModelStatusChip(title: String(localized: "Selected"), icon: .check, iconColor: .white, style: .prominent)
         case .installed:
             ModelStatusChip(title: String(localized: "Installed"), icon: .check, iconColor: VerbatimColor.green)
         case .downloading(let progress):
             ModelStatusChip(
-                title: String(localized: "Downloading \(Int((progress * 100).rounded()))%"),
+                title: String(localized: "Downloading \(Int(((progress?.fraction ?? 0) * 100).rounded()))%"),
                 icon: .download,
                 iconColor: VerbatimColor.accent
             )
-        case .preparing:
-            ModelStatusChip(title: String(localized: "Preparing"), icon: .loader, iconColor: VerbatimColor.orange)
+        case .waitingForRecording:
+            ModelStatusChip(title: String(localized: "Paused"), icon: .pause, iconColor: VerbatimColor.orange)
+        case .verifying:
+            ModelStatusChip(title: String(localized: "Verifying"), icon: .loader, iconColor: VerbatimColor.orange)
+        case .removing:
+            ModelStatusChip(title: String(localized: "Removing"), icon: .loader, iconColor: VerbatimColor.orange)
+        case .failed:
+            ModelStatusChip(title: String(localized: "Failed"), icon: .alert, iconColor: VerbatimColor.orange)
+        case .notInstalled where !row.isSupported:
+            ModelStatusChip(
+                title: String(localized: "Not Supported on This Mac"),
+                icon: .circle,
+                iconColor: VerbatimColor.tertiaryText,
+                style: .outlined
+            )
         case .notInstalled:
             ModelStatusChip(
                 title: String(localized: "Not Installed"),
@@ -63,30 +77,49 @@ struct SpeechModelRow: View {
     }
 
     @ViewBuilder
-    private func progress(for state: ModelInstallState) -> some View {
-        switch state {
+    private var progress: some View {
+        switch row.state {
         case .downloading(let progress):
             VStack(alignment: .leading, spacing: 4) {
-                SettingsProgressBar(fraction: progress)
-                caption(
-                    SettingsFormat.downloadCaption(
-                        progress: progress,
-                        sizeMegabytes: model.sizeMegabytes,
-                        secondsLeft: viewModel.secondsLeft(downloading: model, progress: progress)
-                    )
-                )
-                .monospacedDigit()
+                if let progress {
+                    SettingsProgressBar(fraction: progress.fraction)
+                    caption(SettingsFormat.downloadCaption(progress))
+                        .monospacedDigit()
+                } else {
+                    IndeterminateProgressBar()
+                    caption(String(localized: "Starting…"))
+                }
             }
             .padding(.top, 5)
-        case .preparing:
+        case .waitingForRecording(let progress):
+            VStack(alignment: .leading, spacing: 4) {
+                SettingsProgressBar(fraction: progress?.fraction ?? 0, tint: VerbatimColor.orange)
+                caption(String(localized: "Waiting for the recording to end."))
+            }
+            .padding(.top, 5)
+        case .verifying:
             VStack(alignment: .leading, spacing: 4) {
                 IndeterminateProgressBar()
-                caption(String(localized: "Optimizing for this Mac’s Neural Engine. This happens once per model."))
+                caption(String(localized: "Checking the downloaded files."))
             }
             .padding(.top, 5)
-        case .notInstalled, .installed:
+        case .failed(let failure):
+            failureDescription(ModelIssue(failure))
+                .padding(.top, 3)
+        case .notInstalled, .installed, .removing:
             EmptyView()
         }
+    }
+
+    private func failureDescription(_ issue: ModelIssue) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(issue.title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(VerbatimColor.primaryText)
+            caption(issue.message)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private func caption(_ text: String) -> some View {
@@ -95,43 +128,56 @@ struct SpeechModelRow: View {
             .foregroundStyle(VerbatimColor.secondaryText)
     }
 
-    @ViewBuilder
-    private func actions(for state: ModelInstallState, isDefault: Bool) -> some View {
+    private var actions: some View {
         HStack(spacing: 6) {
-            switch state {
+            switch row.state {
             case .notInstalled:
-                DownloadButton { viewModel.download(model.id) }
-            case .downloading, .preparing:
+                if row.isSupported {
+                    DownloadButton { viewModel.download(row.id) }
+                }
+            case .downloading, .waitingForRecording, .verifying:
                 Button {
-                    viewModel.cancelDownload(model.id)
+                    viewModel.cancelDownload(row.id)
                 } label: {
                     IconView(.xCircle, size: 16)
                 }
                 .buttonStyle(SettingsIconButtonStyle())
                 .help("Cancel")
-                .accessibilityLabel("Cancel \(model.name) download")
+                .accessibilityLabel("Cancel \(row.model.name) download")
             case .installed:
-                if !isDefault {
-                    Button("Make Default") { viewModel.makeDefault(model.id) }
+                if !row.isSelected {
+                    Button("Select") { viewModel.select(row.id) }
                         .buttonStyle(.verbatim(.secondary, size: .inline))
                 }
-                Button {
-                    viewModel.requestRemoval(of: model.id)
-                } label: {
-                    IconView(.trash, size: 14)
+                removeButton(help: "Remove model")
+            case .failed(let failure):
+                if failure != .unsupportedOnThisMac {
+                    Button("Retry") { viewModel.download(row.id) }
+                        .buttonStyle(.verbatim(.secondary, size: .inline))
                 }
-                .buttonStyle(SettingsIconButtonStyle())
-                .disabled(isDefault)
-                .help(isDefault ? "Choose another default model before removing this one" : "Remove model")
-                .accessibilityLabel("Remove \(model.name)")
+                removeButton(help: "Remove what was downloaded")
+            case .removing:
+                EmptyView()
             }
         }
         .fixedSize()
+    }
+
+    private func removeButton(help: LocalizedStringKey) -> some View {
+        Button {
+            viewModel.requestRemoval(of: row.id)
+        } label: {
+            IconView(.trash, size: 14)
+        }
+        .buttonStyle(SettingsIconButtonStyle())
+        .help(help)
+        .accessibilityLabel("Remove \(row.model.name)")
     }
 }
 
 /// The 22 pt Download button with an accent download icon.
 struct DownloadButton: View {
+    var title: LocalizedStringKey = "Download"
     let action: () -> Void
 
     var body: some View {
@@ -139,7 +185,7 @@ struct DownloadButton: View {
             HStack(spacing: 5) {
                 IconView(.download, size: 12)
                     .foregroundStyle(VerbatimColor.accent)
-                Text("Download")
+                Text(title)
             }
         }
         .buttonStyle(.verbatim(.secondary, size: .inline))

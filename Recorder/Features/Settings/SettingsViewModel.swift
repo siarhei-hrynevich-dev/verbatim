@@ -1,71 +1,87 @@
 import Foundation
 import Observation
+import os
 
-/// Presentation state of the Settings window.
-///
-/// This is a layout-only implementation: model downloads, index building and update checks are simulated by
-/// `advanceSimulation()`, and storage figures come from fixed sample data. No model is downloaded or loaded, and
-/// no file, login item or network service is touched.
+/// Presentation state of the Settings window. The same code runs for real and for design review; only its
+/// dependencies differ, which is why nothing here branches on a preview flag.
 @MainActor
 @Observable
 final class SettingsViewModel {
-    /// Search index progress, as the Semantic Search section describes it.
-    enum IndexStatus: Equatable {
-        case off
-        case waitingForModel
-        case indexing(indexed: Int, total: Int)
-        case upToDate
+    struct Dependencies {
+        let preferences: AppPreferences
+        let loginItem: any LoginItemControlling
+        let recordingsStorage: any RecordingsStorageProviding
+        let systemActions: any SystemActions
+        let modelManager: ModelManager
+        let metadata: AppMetadata
+        /// Goes through the Recorder, which owns the recordings folder and shows it in its footer.
+        let chooseRecordingsFolder: @MainActor (URL) async -> Void
     }
 
-    let data: SettingsPreviewData
-
     var selectedTab: SettingsTab = .general
-    var sheet: SettingsSheet?
+    var isShowingLicenses = false
+    /// A failed General or Storage action.
+    var issue: String?
 
-    var launchesAtLogin = true
-    var showsMenuBarIcon = true
-    var opensRecorderOnDockClick = true
-    var notifiesWhenProcessingFinishes = true
-    var closeBehavior: CloseBehavior = .keepRunning
+    private(set) var models: ModelSettingsViewModel
+    private(set) var loginItemStatus = LoginItemStatus.disabled
+    /// `nil` until first read, or when it could not be read.
+    private(set) var recordingsStorage: RecordingsStorage?
 
-    var isSemanticSearchEnabled = true
-    var language: TranscriptionLanguage
-    var postponesOnBattery = true
-    var checksForUpdatesAutomatically = true
+    private var dependencies: Dependencies
+    @ObservationIgnored private let liveDependencies: Dependencies
 
-    var modelStates: [SpeechModel.ID: ModelInstallState] = [:]
-    var defaultModelID: SpeechModel.ID
-    var embeddingState: ModelInstallState = .installed
-    var indexedRecordingCount = 0
-    private(set) var location: StorageLocation
-    private(set) var previewCacheMegabytes = 0
-    var updateStatus: UpdateCheckStatus = .idle
-
-    /// Simulation steps since the window opened; drives index and update-check timing.
-    var tick = 0
-    var updateCheckStartTick = 0
-
-    init(data: SettingsPreviewData = .sample, scenario: SettingsPreviewScenario = .general) {
-        self.data = data
-        defaultModelID = data.defaultModelID
-        language = data.languages[0]
-        location = data.location
-        apply(scenario)
+    init(dependencies: Dependencies, previewScenario: SettingsPreviewScenario? = nil) {
+        self.dependencies = dependencies
+        liveDependencies = dependencies
+        models = ModelSettingsViewModel(manager: dependencies.modelManager, systemActions: dependencies.systemActions)
+        if let previewScenario {
+            apply(previewScenario)
+        }
     }
 
     // MARK: - General
 
+    var launchesAtLogin: Bool {
+        get { loginItemStatus != .disabled }
+        set { setLaunchesAtLogin(newValue) }
+    }
+
+    var loginItemNote: String {
+        loginItemStatus == .requiresApproval
+            ? String(localized: "Waiting for your approval in System Settings › General › Login Items.")
+            : String(localized: "Opens Verbatim when you log in to this Mac.")
+    }
+
+    var showsMenuBarIcon: Bool {
+        get { dependencies.preferences.settings.showsMenuBarIcon }
+        set { dependencies.preferences.update { $0.showsMenuBarIcon = newValue } }
+    }
+
+    var opensRecorderOnDockClick: Bool {
+        get { dependencies.preferences.settings.opensRecorderOnDockClick }
+        set { dependencies.preferences.update { $0.opensRecorderOnDockClick = newValue } }
+    }
+
+    var closeBehavior: CloseBehavior {
+        get { dependencies.preferences.settings.closeBehavior }
+        set { dependencies.preferences.update { $0.closeBehavior = newValue } }
+    }
+
     var dockClickNote: String {
         opensRecorderOnDockClick
             ? String(localized: "Shows the Recorder, or the recording in progress.")
-            : String(localized: "Clicking the Dock icon opens the Library instead.")
+            : String(localized: "Opens the Library instead, unless a recording is in progress.")
     }
 
     /// Explains what closing the Recorder window does; it depends on whether the menu bar icon is shown.
     var closeBehaviorNote: String {
         switch closeBehavior {
         case .keepRunning where showsMenuBarIcon:
-            String(localized: "Verbatim stays in the menu bar and Dock. A recording in progress continues.")
+            String(
+                localized:
+                    "Verbatim stays in the Dock. A recording in progress continues, with its timer in the menu bar."
+            )
         case .keepRunning:
             String(localized: "Verbatim stays in the Dock. A recording in progress continues.")
         case .quit:
@@ -78,92 +94,121 @@ final class SettingsViewModel {
         }
     }
 
+    func refreshLoginItemStatus() {
+        loginItemStatus = dependencies.loginItem.status()
+    }
+
+    private func setLaunchesAtLogin(_ isEnabled: Bool) {
+        do {
+            try dependencies.loginItem.setEnabled(isEnabled)
+        } catch {
+            Self.logger.error("Could not change the login item: \(String(describing: error))")
+            issue = String(
+                localized: "Verbatim couldn’t change whether it opens at login. \(error.localizedDescription)"
+            )
+        }
+        refreshLoginItemStatus()
+    }
+
+    func openLoginItemSettings() {
+        let systemActions = dependencies.systemActions
+        Task {
+            await systemActions.open(.loginItems)
+        }
+    }
+
     // MARK: - Storage
 
-    var installedSpeechModels: [SpeechModel] {
-        data.speechModels.filter { state(of: $0.id).isInstalled }
+    var modelsBytes: Int64 {
+        models.storageUsageBytes
     }
 
-    /// Installed speech models plus the embedding model.
-    var modelsMegabytes: Int {
-        let speech = installedSpeechModels.reduce(0) { $0 + $1.sizeMegabytes }
-        return speech + (embeddingState.isInstalled ? data.embeddingSizeMegabytes : 0)
+    var totalBytes: Int64 {
+        (recordingsStorage?.usedBytes ?? 0) + modelsBytes
     }
 
-    var cacheMegabytes: Int {
-        previewCacheMegabytes + data.searchIndexMegabytes
+    func refreshStorage() async {
+        do {
+            recordingsStorage = try await dependencies.recordingsStorage.recordingsStorage()
+        } catch {
+            Self.logger.error("Could not read recordings storage: \(String(describing: error))")
+            issue = String(
+                localized: "Verbatim couldn’t read how much space recordings use. \(error.localizedDescription)"
+            )
+        }
+        await models.refresh()
     }
 
-    var totalMegabytes: Int {
-        data.recordingsMegabytes + modelsMegabytes + cacheMegabytes
+    func chooseRecordingsFolder(_ url: URL) {
+        Task {
+            await dependencies.chooseRecordingsFolder(url)
+            await refreshStorage()
+        }
     }
 
-    /// Base is offered for cleanup while it is installed but not the default.
-    var unusedSpeechModel: SpeechModel? {
-        data.speechModels.first { $0.id == "base" && state(of: $0.id).isInstalled && $0.id != defaultModelID }
+    func folderSelectionFailed(_ error: any Error) {
+        Self.logger.error("Folder selection failed: \(String(describing: error))")
+        issue = String(localized: "Verbatim couldn’t use that folder. \(error.localizedDescription)")
     }
 
-    func clearPreviewCache() {
-        previewCacheMegabytes = 0
-    }
-
-    func requestLocationChange() {
-        sheet = .moveRecordings
-    }
-
-    /// Simulates saving new recordings to the chosen folder. With `movingRecordings`, the real implementation will
-    /// copy and verify existing recordings before removing the originals.
-    func changeLocation(movingRecordings: Bool) {
-        location = data.proposedLocation
-        sheet = nil
+    func showRecordingsInFinder() {
+        guard let url = recordingsStorage?.location.url else {
+            return
+        }
+        let systemActions = dependencies.systemActions
+        Task {
+            await systemActions.openInFinder(url)
+        }
     }
 
     func showModels() {
         selectedTab = .models
     }
 
+    func dismissIssue() {
+        issue = nil
+    }
+
     // MARK: - About
 
-    func checkForUpdates() {
-        guard updateStatus != .checking else {
-            return
-        }
-        updateStatus = .checking
-        updateCheckStartTick = tick
+    var metadata: AppMetadata {
+        dependencies.metadata
     }
 
     func showLicenses() {
-        sheet = .licenses
+        isShowingLicenses = true
     }
 
-    func dismissSheet() {
-        sheet = nil
+    func dismissLicenses() {
+        isShowingLicenses = false
     }
 
     // MARK: - Preview scenarios
 
+    /// Switches to sample data and simulated downloads, leaving real models and preferences untouched.
     func apply(_ scenario: SettingsPreviewScenario) {
-        launchesAtLogin = true
-        showsMenuBarIcon = true
-        opensRecorderOnDockClick = true
-        notifiesWhenProcessingFinishes = true
-        closeBehavior = .keepRunning
-        isSemanticSearchEnabled = true
-        language = data.languages[0]
-        postponesOnBattery = true
-        checksForUpdatesAutomatically = true
-        modelStates = data.initialModelStates
-        defaultModelID = data.defaultModelID
-        embeddingState = .installed
-        indexedRecordingCount = Self.initialIndexedCount
-        location = data.location
-        previewCacheMegabytes = data.previewCacheMegabytes
-        updateStatus = .idle
-        tick = 0
+        use(.preview(for: scenario))
         selectedTab = scenario.tab
-        sheet = scenario.sheet
+        isShowingLicenses = scenario == .licenses
+        if scenario == .removeModel {
+            Task {
+                await models.refresh()
+                models.requestRemoval(of: SettingsPreviewScenario.sampleRemovedModelID)
+            }
+        }
     }
 
-    /// The design opens with two of the 48 recordings still being indexed.
-    private static let initialIndexedCount = 46
+    /// Back to the real thing after a design scenario.
+    func endPreview() {
+        use(liveDependencies)
+    }
+
+    private func use(_ next: Dependencies) {
+        dependencies = next
+        models = ModelSettingsViewModel(manager: next.modelManager, systemActions: next.systemActions)
+        recordingsStorage = nil
+        refreshLoginItemStatus()
+    }
+
+    private static let logger = Logger(subsystem: "dev.local.Recorder", category: "Settings")
 }

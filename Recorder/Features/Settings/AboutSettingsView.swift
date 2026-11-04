@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Version, update check, and project links.
+/// Version and project links.
 struct AboutSettingsView: View {
-    @Bindable var viewModel: SettingsViewModel
+    let viewModel: SettingsViewModel
 
     var body: some View {
         VStack(spacing: 22) {
@@ -18,11 +18,6 @@ struct AboutSettingsView: View {
                         }
                     }
                     .buttonStyle(AboutRowButtonStyle())
-                    GroupedDivider(leadingInset: 37)
-                    linkRow(icon: .retry, title: "Check for Updates Automatically") {
-                        Toggle("Check for updates automatically", isOn: $viewModel.checksForUpdatesAutomatically)
-                            .toggleStyle(.verbatimSwitch)
-                    }
                 }
                 Text("© 2026 Verbatim contributors. Released under the MIT License.")
                     .font(.system(size: 11))
@@ -44,39 +39,12 @@ struct AboutSettingsView: View {
                 .font(.system(size: 22, weight: .bold))
                 .tracking(-0.22)
                 .accessibilityAddTraits(.isHeader)
-            Text("Version \(viewModel.data.version) (\(viewModel.data.build))")
+            Text("Version \(viewModel.metadata.version) (\(viewModel.metadata.build))")
                 .font(.system(size: 12))
                 .foregroundStyle(VerbatimColor.secondaryText)
                 .textSelection(.enabled)
-            VStack(spacing: 8) {
-                Button("Check for Updates…", action: viewModel.checkForUpdates)
-                    .buttonStyle(.verbatim(.secondary, size: .dialog))
-                    .disabled(viewModel.updateStatus == .checking)
-                updateStatusLine
-            }
-            .padding(.top, 10)
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private var updateStatusLine: some View {
-        HStack(spacing: 5) {
-            switch viewModel.updateStatus {
-            case .idle:
-                Text("Last checked today at \(viewModel.data.lastUpdateCheck)")
-            case .checking:
-                IconView(.loader, size: 12)
-                Text("Checking for updates…")
-            case .upToDate:
-                IconView(.check, size: 12)
-                    .foregroundStyle(VerbatimColor.green)
-                Text("Verbatim \(viewModel.data.version) is the latest version.")
-            }
-        }
-        .font(.system(size: 11))
-        .foregroundStyle(VerbatimColor.secondaryText)
-        .frame(minHeight: 14)
-        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -88,7 +56,7 @@ struct AboutSettingsView: View {
             IconView(.externalLink, size: 11)
                 .foregroundStyle(VerbatimColor.secondaryText)
         }
-        if let url = viewModel.data.sourceCodeURL {
+        if let url = viewModel.metadata.sourceCodeURL {
             Link(destination: url) { row }
                 .buttonStyle(AboutRowButtonStyle())
         } else {

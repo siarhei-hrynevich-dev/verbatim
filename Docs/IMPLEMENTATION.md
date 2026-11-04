@@ -103,27 +103,86 @@ The Viewer window plays recordings from the Library. The player is shared by vid
 
 **Full screen.** The whole window enters native full screen, including the transcript panel.
 
-## Windows (layout only)
+## Speech models (implemented)
 
-Settings is layout only and runs on simulated state, as do the design scenarios of the Viewer and the Library. Each feature has a `Preview` directory with fixed sample data and a scenario type that selects it.
+The AI Models tab downloads, verifies, selects and removes Whisper models. Nothing transcribes with them yet.
+
+| Layer | Component | Responsibility |
+| --- | --- | --- |
+| Presentation | `ModelSettingsView`, `SpeechModelRow`, `ModelSettingsViewModel`, `ModelIssue` | The catalog, states, actions, confirmation, error wording. No file or network work. |
+| Application | `ModelManager` (with `+Installing`), `ModelFileWorkflow`, `RecordingPriorityPolicy`, `ModelContracts` | State and its transitions, the install steps, holding work back while recording, the interfaces below. |
+| Domain | `SpeechModel` | The catalog, `ModelInstallState` and its transitions, `ModelManagementError`, the registry, the resolved model and lease. |
+| Infrastructure | `WhisperModelProvider`, `ModelFileStore`, `HubModelManifestClient`, `JSONModelRegistryStore` | WhisperKit calls, the storage layout, the repository's file listings, the registry file. |
+
+**Catalog.** Tiny, Base, Small and Large v3 Turbo, with the exact variant names WhisperKit uses. Medium is deliberately absent: the repository has it, but WhisperKit 1.1.1 lists it as supported on no Mac. `WhisperKit.recommendedModels()` decides what this Mac supports, without network or disk, so M1 Macs show Turbo as not supported. `WhisperKit.fetchAvailableModels` updates that when Settings opens. Sizes aren't hardcoded: they come from the Hub's tree API, because WhisperKit exposes names but not sizes, and are saved in the registry, so the catalog works offline. A failed refresh changes nothing about installed models and shows a note. WhisperKit's own default for a Mac may be outside this catalog, so the recommendation is Turbo where supported and otherwise Small, and is only ever an offer.
+
+**Storage.** WhisperKit's downloader owns this layout under the `downloadBase` the app gives it, and later loading finds the files there, so nothing is copied:
+
+```text
+~/Library/Application Support/Verbatim/Models/          (in the container when sandboxed; excluded from backups)
+  model-registry.json                                   what was installed, and known sizes
+  models/argmaxinc/whisperkit-coreml/
+    <variant>/                                          model files
+    .cache/huggingface/download/<variant>/              *.metadata and partial *.incomplete files
+    config.json                                         support table, written by fetchAvailableModels
+  models/openai/whisper-<size>/                         tokenizer, shared by models of the same size
+```
+
+**Installing.** `download(_:)` checks state, so duplicates are ignored. Then: list the files; check disk space for what is still missing plus a 500 MB margin; download with `WhisperKit.download`; fetch the tokenizer with `HubApiWrapper`, because WhisperKit otherwise fetches it from the network on first load, which would break offline use; verify every file's size and each large file's SHA-256, plus that the three Core ML components and `tokenizer.json` are present; record it. Only then is it `installed`.
+
+**Progress.** Measured from bytes on disk, including partial files, four times a second. WhisperKit's own `Progress` weighs every file equally, so a 59 MB `weight.bin` and a 243-byte file would count the same. The downloader writes in chunks of 10 MiB, so progress moves in steps of up to that.
+
+**Stopping.** Cancelling is reliable and stops the transfer; it removes the model's files, and its tokenizer when no other model uses it. A failed download keeps its partial files, and Retry continues them with HTTP range requests. A failed verification discards the files, because the downloader would otherwise trust them. An install starting right after a cancel waits for the first to finish, as both would use the same files.
+
+**Restarting.** At launch, and when Settings comes forward, the registry is compared with the disk, using existence and sizes only. Files missing entirely mean the model was removed: it is forgotten. Some missing or changed means `failed(.damagedInstallation)`, and Retry starts it over, since a damaged file can look current to the downloader. Files without a record mean a download never finished: `failed(.interruptedDownload)`, and Retry continues, confirming complete files without downloading them again. An unreadable registry counts as empty, with the same result. This check runs in a task the manager owns, so a window closing can't cancel it halfway.
+
+**Selected model.** The first model to finish installing is selected when none is selected and no other model is installed. Otherwise only an installed, verified model can be selected, by the user. Persisted in `UserDefaults` as `settings.selectedModelID`. Nothing is loaded by selecting. When it becomes unavailable, it stays selected and a warning offers Repair or another installed model. Removing it clears the selection, and an existing installed model is never chosen on the user's behalf; if none remains, the next one installed is selected. The contract for transcription is in [ARCHITECTURE.md](ARCHITECTURE.md#integration-contract-for-transcriptionservice).
+
+**Removing.** Installed models ask first, stating the space freed; leftovers of a failed download go straight away. A model held by a `ModelLease` can't be removed. Only the model's own folder and partial files go, plus its tokenizer when unshared, and recordings and transcripts are never involved. A failure leaves the state as the disk then says.
+
+**Recording.** `RecordingPriorityPolicy` stops running installs when a recording starts preparing, keeping their partial files, and they continue when it ends. A download requested during a recording waits, shown as Paused. A catalog refresh doesn't start. The launch check only reads metadata.
+
+**Errors.** `ModelManagementError` names each case: no network, failed download, insufficient disk, unavailable or unsupported model, failed verification, interrupted download, damaged installation, denied storage, failed removal, model in use, and an absent or unavailable selection. `ModelIssue` words them, and rows offer Retry and removing what was downloaded. Details go to OSLog under the `Models` category. No state stays in Downloading after a failure, and none survives a restart.
+
+**Limits.** Progress steps as described above. A download doesn't continue while the app isn't running, though it resumes on Retry. Large v3 Turbo is unavailable on M1, where WhisperKit lists only compressed Large variants not in this catalog.
+
+## Settings window (implemented)
+
+| Layer | Component | Responsibility |
+| --- | --- | --- |
+| Presentation | `SettingsViewModel`, the tab views | Tab state, bindings, storage figures, version. |
+| Application | `AppPreferences`, `ModelContracts` | The single owner of preferences; `SettingsRepository`, `LoginItemControlling`, `RecordingsStorageProviding`. |
+| Infrastructure | `UserDefaultsSettingsRepository`, `SMAppServiceLoginItem` | Persistence and the system's login item. |
+
+**General.** Launch at Login uses `SMAppService`, and the system stays the source of truth: its state is read back, and approval pending in System Settings is shown with a button to get there. Show Menu Bar Icon controls the item shown while recording; the Dock badge stays. The Dock click opens the Recorder or the Library, and a recording always brings back the Recorder. Choosing Quit makes closing the Recorder window quit the app, waiting for any recording to be stopped and saved.
+
+**Storage.** The recordings folder and its free space, the number and size of tracked recordings, and the space models use, all real. Change… goes through `RecorderViewModel`, as the Recorder's footer does, so both show the same folder and existing recordings stay where they are.
+
+**About.** Version and build from the bundle. The licenses list names what the app actually ships, and each row opens its published text.
+
+**Semantic Search.** A static section saying it isn't available yet: no embedding model is installed and no index is built.
+
+**Left out because nothing backs them yet.** Notify When Processing Finishes, Transcription Language, Postpone on Battery Power, Check for Updates and its automatic toggle, moving existing recordings, Preview Cache, Search Index and Missing Recordings figures. They return as their features do.
+
+## Windows (design scenarios)
+
+The Viewer and the Library keep design scenarios on simulated state beside the real windows. Each feature has a `Preview` directory with fixed sample data and a scenario type that selects it.
 
 - **Recorder design scenarios.** `RecorderPreviewScenario` and `RecorderPreviewState` still show the Recorder's design states with sample data, for SwiftUI previews and review. They never touch capture and do not change saved preferences.
 - **Library scenarios.** With a `LibraryPreviewScenario`, `LibraryViewModel` filters, sorts, searches and removes sample recordings from `Features/Library/Preview` and touches nothing on disk. `SimulatedLibrarySearch` stands in for full-text and semantic search. Opening a sample recording goes to the Viewer's simulated state.
 - **Viewer scenarios.** With a `ViewerPreviewScenario`, `ViewerViewModel` runs a simulated clock over sample transcripts and draws sample frames and waveforms, and touches neither media nor the Library, following the same pattern.
-- **Settings.** `SettingsViewModel` with simulated downloads owned by a cancellable task that runs while the window is open, following the same pattern with its own `Preview` scenarios.
-
-Real downloads will need Application services that outlive windows; the current simulations do not. The Settings window's recordings location is still simulated and is not connected to the Recorder's folder.
+- **Settings scenarios.** Unlike the others, `SettingsViewModel` has no preview branches: a scenario swaps its dependencies for `SettingsViewModel.Dependencies.preview(for:)`, which runs the real `ModelManager` on a simulated provider, with in-memory preferences and fixed storage figures. It touches nothing on disk or the network, and **Live** in the Debug menu swaps back.
 
 ## App integration
 
 App holds the AppKit integration:
 
-- `AppComposition` creates the recording, library and playback services, the Recorder, Library and Viewer view models, and the Viewer's video surface.
-- `AppDelegate` holds those and builds the Dock menu and quit confirmation.
-- `RecordingIndicators` observes recording state to show the menu bar item and Dock badge.
+- `AppComposition` creates the recording, library, playback and model services, preferences, the Recorder, Library, Viewer and Settings view models, and the Viewer's video surface.
+- `AppDelegate` holds those, builds the Dock menu and quit confirmation, compares models with the disk at launch (no download or loading), and acts on the Dock click and window close preferences.
+- `RecordingIndicators` observes recording state and the menu bar preference to show the menu bar item and Dock badge.
 - `WindowNavigator` lets those AppKit menus open SwiftUI windows.
 - The Debug menu lives in `App/DebugCommands.swift`.
-- Dock activation reopens the Recorder window. The Dock menu, menu bar item and quit confirmation act on the real recording.
+- Dock activation reopens the Recorder window, or the Library if chosen in Settings. The Dock menu, menu bar item and quit confirmation act on the real recording.
 - The app is a regular Dock application with the SwiftUI App lifecycle; no `LSUIElement` agent mode or custom Dock UI is configured.
 
 ## Shared UI
@@ -134,7 +193,7 @@ Shared design tokens and reusable controls live in `Shared/Design` and `Shared/C
 
 Recording is a Codable, Sendable metadata value with an identifier, creation date, nonblank title, finite nonnegative duration, and processing status. `RecordingMetadata` adds its files, sources and completion, and `LibraryRecording` adds its media reference and size. Database rows are validated when read; the sidecar is not read, and its synthesized Codable provides round trips only.
 
-The app target links WhisperKit and SQLiteVecStore but does not instantiate either. The Library uses the system `SQLite3` directly.
+The app target links WhisperKit and SQLiteVecStore but does not instantiate either: `WhisperModelProvider` uses only WhisperKit's static model APIs and its Hub client. The Library uses the system `SQLite3` directly.
 
 ## Tests
 
@@ -153,9 +212,12 @@ Swift Testing suites in `RecorderTests` cover:
 - Playback domain rules: state transitions, seek validation, duration handling and formatting, failure translation (`PlaybackModelTests`).
 - The real player on media from the real writer, muted and without hardware: loading, both audio tracks, seeking, completion, replay, unloading, overtaken loads, unusable files, error translation; opening media through the real file store (`AVPlaybackServiceTests`).
 - The live Viewer view model on a real Library with the player replaced: loading, errors, recovery, switching and cleanup (`ViewerPlaybackTests`), transport, scrubbing and completion (`ViewerTransportTests`), following the Library, the transcript panel and Finder (`ViewerLibraryIntegrationTests`).
-- Presentation logic of the Recorder's design scenarios and the Library, Viewer and Settings view models against their simulated data (`RecorderViewModelTests`, `LibraryViewModelTests`, `ViewerViewModelTests`, `SettingsViewModelTests`).
+- Presentation logic of the Recorder's design scenarios and the Library and Viewer view models against their simulated data (`RecorderViewModelTests`, `LibraryViewModelTests`, `ViewerViewModelTests`).
 - Dock and menu bar menu construction (`RecordingMenusTests`).
+- The model lifecycle with a controllable provider: transitions, success, failures, duplicates, cancelling, disk space, recording priority (`ModelManagerTests`); selection, including the first model being selected, and removal (`ModelSelectionTests`); restarts, external changes, damaged and interrupted files, the offline catalog (`ModelManagerRecoveryTests`); state rules and the recommendation (`ModelInstallStateTests`).
+- The real file boundary on temporary folders laid out as WhisperKit's downloader leaves them: verification, hashes, partial files, what removal may touch, hostile identifiers and manifest paths; repository listings with the network replaced; error translation (`ModelFileStoreTests`).
+- Settings persistence, the registry file, preferences and bundle metadata (`SettingsPersistenceTests`), the models tab (`ModelSettingsViewModelTests`) and the live Settings view model and its scenarios (`SettingsViewModelTests`).
 
 ## Not implemented yet
 
-No models, processing workers, transcripts or recovery of interrupted recordings exist yet. The Settings window is a designed layout driven by simulated data, as are the Viewer's design scenarios. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. The Settings window's storage figures are still samples. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.
+No transcription, embedding models, processing workers, transcripts or recovery of interrupted recordings exist yet. Speech models can be installed but nothing uses them. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.

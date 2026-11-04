@@ -4,18 +4,20 @@ import Observation
 /// Shows that a recording is running while the Recorder window can stay closed: a menu bar item with a red dot and
 /// the elapsed time, and a red badge on the Dock icon, which itself doesn't change.
 ///
-/// Both appear only while recording. The controller observes the Recorder state and owns the one-second task that
-/// refreshes the timer; the task ends when recording stops.
+/// Both appear only while recording, and the menu bar item only if the user wants it. The controller observes the
+/// Recorder state and owns the one-second task that refreshes the timer; the task ends when recording stops.
 @MainActor
 final class RecordingIndicators: NSObject, NSMenuDelegate {
     private let recorder: RecorderViewModel
     private let navigator: WindowNavigator
+    private let preferences: AppPreferences
     private var statusItem: NSStatusItem?
     private var timerTask: Task<Void, Never>?
 
-    init(recorder: RecorderViewModel, navigator: WindowNavigator) {
+    init(recorder: RecorderViewModel, navigator: WindowNavigator, preferences: AppPreferences) {
         self.recorder = recorder
         self.navigator = navigator
+        self.preferences = preferences
     }
 
     func start() {
@@ -33,8 +35,12 @@ final class RecordingIndicators: NSObject, NSMenuDelegate {
             stopShowing()
             return
         }
-        showStatusItem()
-        refreshTitle(clock: clock)
+        if preferences.settings.showsMenuBarIcon {
+            showStatusItem()
+            refreshTitle(clock: clock)
+        } else {
+            removeStatusItem()
+        }
         NSApp.dockTile.badgeLabel = Self.dockBadge
         if clock.isPaused {
             timerTask?.cancel()
@@ -64,11 +70,15 @@ final class RecordingIndicators: NSObject, NSMenuDelegate {
     private func stopShowing() {
         timerTask?.cancel()
         timerTask = nil
+        removeStatusItem()
+        NSApp.dockTile.badgeLabel = nil
+    }
+
+    private func removeStatusItem() {
         if let statusItem {
             NSStatusBar.system.removeStatusItem(statusItem)
         }
         statusItem = nil
-        NSApp.dockTile.badgeLabel = nil
     }
 
     private func refreshTitle(clock: RecordingClock? = nil) {

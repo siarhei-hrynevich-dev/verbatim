@@ -7,16 +7,19 @@ struct GeneralSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             SettingsSection {
-                SettingsToggleRow(
-                    title: "Launch at Login",
-                    detail: String(localized: "Starts in the background, ready from the menu bar or Dock."),
-                    isOn: $viewModel.launchesAtLogin
-                )
+                SettingsRow(title: "Launch at Login", detail: viewModel.loginItemNote) {
+                    if viewModel.loginItemStatus == .requiresApproval {
+                        Button("Open System Settings", action: viewModel.openLoginItemSettings)
+                            .buttonStyle(.verbatim(.secondary, size: .inline))
+                    }
+                    Toggle("Launch at Login", isOn: $viewModel.launchesAtLogin)
+                        .toggleStyle(.verbatimSwitch)
+                }
                 GroupedDivider(leadingInset: 12)
                 SettingsToggleRow(
                     title: "Show Menu Bar Icon",
                     detail: String(
-                        localized: "Start and stop recordings and see elapsed time without opening a window."
+                        localized: "See elapsed time and stop or pause without opening a window, while recording."
                     ),
                     isOn: $viewModel.showsMenuBarIcon
                 )
@@ -41,19 +44,11 @@ struct GeneralSettingsView: View {
                     }
                 }
             }
-
-            SettingsSection {
-                SettingsToggleRow(
-                    title: "Notify When Processing Finishes",
-                    detail: String(
-                        localized: "A notification when a recording’s transcript and search index are ready."
-                    ),
-                    isOn: $viewModel.notifiesWhenProcessingFinishes
-                )
-            }
         }
         .padding(SettingsLayout.contentPadding)
         .fixedSize(horizontal: false, vertical: true)
+        // The system owns this, and the user can change it in System Settings at any time.
+        .onAppear(perform: viewModel.refreshLoginItemStatus)
     }
 }
 

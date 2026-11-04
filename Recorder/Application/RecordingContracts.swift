@@ -81,6 +81,7 @@ enum SystemSettingsPane: Equatable, Sendable {
     case screenRecording
     case microphone
     case storage
+    case loginItems
 }
 
 /// Hands off to the operating system's own UI.

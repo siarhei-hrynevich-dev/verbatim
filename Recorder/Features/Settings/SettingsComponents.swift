@@ -241,5 +241,5 @@ enum SettingsLayout {
     static let windowWidth: CGFloat = 620
     static let contentPadding: CGFloat = 20
     /// The AI Models tab scrolls inside a fixed height, as in the design.
-    static let modelsTabHeight: CGFloat = 780
+    static let modelsTabHeight: CGFloat = 640
 }

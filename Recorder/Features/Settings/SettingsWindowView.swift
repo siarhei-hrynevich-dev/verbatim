@@ -6,7 +6,6 @@ struct SettingsWindowView: View {
     @Bindable var viewModel: SettingsViewModel
     /// Overrides the system accent color; `nil` follows the system.
     var accent: VerbatimAccent?
-    var actions = SettingsWindowActions()
 
     var body: some View {
         TabView(selection: $viewModel.selectedTab) {
@@ -27,11 +26,19 @@ struct SettingsWindowView: View {
         }
         .focusEffectDisabled()
         .containerBackground(VerbatimColor.windowBackground, for: .window)
-        .sheet(item: $viewModel.sheet) { sheet in
-            sheetContent(for: sheet)
+        .sheet(isPresented: $viewModel.isShowingLicenses) {
+            LicensesSheet(licenses: ThirdPartyLicense.shipped, done: viewModel.dismissLicenses)
                 .verbatimAccent(accent)
         }
-        .task { await viewModel.runSimulation() }
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(get: { viewModel.issue != nil }, set: { _ in viewModel.dismissIssue() }),
+            presenting: viewModel.issue
+        ) { _ in
+            Button("OK", action: viewModel.dismissIssue)
+        } message: { issue in
+            Text(issue)
+        }
         .verbatimAccent(accent)
     }
 
@@ -41,52 +48,13 @@ struct SettingsWindowView: View {
         case .general:
             GeneralSettingsView(viewModel: viewModel)
         case .models:
-            ModelsSettingsView(viewModel: viewModel, showModelsInFinder: actions.showModelsInFinder)
+            ModelSettingsView(viewModel: viewModel.models)
         case .storage:
-            StorageSettingsView(viewModel: viewModel, actions: actions)
+            StorageSettingsView(viewModel: viewModel)
         case .about:
             AboutSettingsView(viewModel: viewModel)
         }
     }
-
-    @ViewBuilder
-    private func sheetContent(for sheet: SettingsSheet) -> some View {
-        switch sheet {
-        case .removeModel(let modelID):
-            if let model = viewModel.speechModel(withID: modelID) {
-                RemoveModelSheet(
-                    model: model,
-                    cancel: viewModel.dismissSheet,
-                    remove: { viewModel.confirmRemoval(of: modelID) }
-                )
-            }
-        case .moveRecordings:
-            MoveRecordingsSheet(
-                destination: viewModel.data.proposedLocation,
-                current: viewModel.location,
-                recordingCount: viewModel.data.recordingCount,
-                recordingsMegabytes: viewModel.data.recordingsMegabytes,
-                cancel: viewModel.dismissSheet,
-                keepRecordings: { viewModel.changeLocation(movingRecordings: false) },
-                moveRecordings: { viewModel.changeLocation(movingRecordings: true) }
-            )
-        case .licenses:
-            LicensesSheet(
-                licenses: viewModel.data.licenses,
-                openLicense: actions.openLicense,
-                done: viewModel.dismissSheet
-            )
-        }
-    }
-}
-
-/// Finder and Library integration that the Settings window hands to the app. None is implemented yet, so every
-/// action defaults to doing nothing.
-struct SettingsWindowActions {
-    var showRecordingsInFinder: () -> Void = {}
-    var showModelsInFinder: () -> Void = {}
-    var reviewMissingRecordings: () -> Void = {}
-    var openLicense: (ThirdPartyLicense) -> Void = { _ in }
 }
 
 extension SettingsTab {
@@ -110,18 +78,18 @@ extension SettingsTab {
 }
 
 #Preview("General") {
-    SettingsWindowView(viewModel: SettingsViewModel(scenario: .general))
+    SettingsWindowView(viewModel: .preview(.general))
 }
 
 #Preview("AI Models · dark") {
-    SettingsWindowView(viewModel: SettingsViewModel(scenario: .models))
+    SettingsWindowView(viewModel: .preview(.models))
         .preferredColorScheme(.dark)
 }
 
 #Preview("Storage · indigo") {
-    SettingsWindowView(viewModel: SettingsViewModel(scenario: .storage), accent: .indigo)
+    SettingsWindowView(viewModel: .preview(.storage), accent: .indigo)
 }
 
 #Preview("About") {
-    SettingsWindowView(viewModel: SettingsViewModel(scenario: .about))
+    SettingsWindowView(viewModel: .preview(.about))
 }

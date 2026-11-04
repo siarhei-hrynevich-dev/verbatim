@@ -1,110 +1,191 @@
 import Foundation
+import Synchronization
 
-/// Fixed sample content for the layout-only Settings window: the model catalog and its install states, storage
-/// figures, and app version. Model downloads, storage measurement and update checks are not implemented yet;
-/// this stands in for what those services will provide.
-struct SettingsPreviewData: Sendable {
-    let speechModels: [SpeechModel]
-    let initialModelStates: [SpeechModel.ID: ModelInstallState]
-    let defaultModelID: SpeechModel.ID
-    let embeddingModelSummary: String
-    let embeddingSizeMegabytes: Int
-    let languages: [TranscriptionLanguage]
-    let licenses: [ThirdPartyLicense]
-    let location: StorageLocation
-    /// Stands in for the folder chosen in the Change… folder picker.
-    let proposedLocation: StorageLocation
-    let recordingCount: Int
-    let recordingsMegabytes: Int
-    let searchIndexMegabytes: Int
-    let previewCacheMegabytes: Int
-    let missingRecordingCount: Int
-    let version: String
-    let build: String
-    let lastUpdateCheck: String
-    let sourceCodeURL: URL?
+/// Sample dependencies for reviewing the Settings design: the real view models and `ModelManager` running on simulated
+/// downloads and fixed figures. Nothing here touches the network, the disk, login items or saved preferences.
+@MainActor
+extension SettingsViewModel.Dependencies {
+    static func preview(for scenario: SettingsPreviewScenario) -> Self {
+        let installedIDs = scenario == .noModels ? [] : SimulatedModelProvider.sampleInstalledIDs
+        let repository = PreviewSettingsRepository(selectedModelID: installedIDs.last)
+        let modelManager = ModelManager(
+            provider: SimulatedModelProvider(installedIDs: installedIDs),
+            registryStore: PreviewModelRegistryStore(installedIDs: installedIDs),
+            settings: repository
+        )
+        if scenario == .models {
+            modelManager.download("openai_whisper-small")
+        }
+        return Self(
+            preferences: AppPreferences(repository: repository),
+            loginItem: PreviewLoginItem(),
+            recordingsStorage: PreviewRecordingsStorage(),
+            systemActions: PreviewSystemActions(),
+            modelManager: modelManager,
+            metadata: AppMetadata(version: "1.2.0", build: "142"),
+            chooseRecordingsFolder: { _ in }
+        )
+    }
+}
 
-    static let sample = SettingsPreviewData(
-        speechModels: [
-            SpeechModel(
-                id: "tiny",
-                name: "Tiny",
-                sizeMegabytes: 75,
-                summary: "Fastest. Fine for clear speech in a quiet room."
-            ),
-            SpeechModel(
-                id: "base",
-                name: "Base",
-                sizeMegabytes: 142,
-                summary: "Fast, with fair accuracy for short notes and dictation."
-            ),
-            SpeechModel(
-                id: "small",
-                name: "Small",
-                sizeMegabytes: 466,
-                summary: "Balanced speed and accuracy for most calls."
-            ),
-            SpeechModel(
-                id: "medium",
-                name: "Medium",
-                sizeMegabytes: 1_500,
-                summary: "More accurate, noticeably slower on long recordings."
-            ),
-            SpeechModel(
-                id: "turbo",
-                name: "Large v3 Turbo",
-                sizeMegabytes: 1_600,
-                summary: "Close to Large v3 accuracy at several times the speed. Recommended."
-            ),
-            SpeechModel(
-                id: "large",
-                name: "Large v3",
-                sizeMegabytes: 3_100,
-                summary: "Most accurate, especially with accents and mixed languages. Slowest."
+extension SettingsViewModel {
+    /// For SwiftUI previews.
+    static func preview(_ scenario: SettingsPreviewScenario) -> SettingsViewModel {
+        SettingsViewModel(dependencies: .preview(for: .general), previewScenario: scenario)
+    }
+}
+
+/// Pretends to download and verify. Sizes are the repository's real ones, rounded, so the layout sees realistic values.
+private struct SimulatedModelProvider: SpeechModelProviding {
+    static let sampleInstalledIDs = ["openai_whisper-base", "openai_whisper-large-v3-v20240930_turbo"]
+    static let sampleSizes: [SpeechModel.ID: Int64] = [
+        "openai_whisper-tiny": 79_000_000,
+        "openai_whisper-base": 150_000_000,
+        "openai_whisper-small": 490_000_000,
+        "openai_whisper-large-v3-v20240930_turbo": 1_640_000_000
+    ]
+
+    let installedIDs: [SpeechModel.ID]
+    let storageLocation = URL(filePath: "/tmp/verbatim-settings-preview", directoryHint: .isDirectory)
+
+    func supportedModelIDs() -> Set<SpeechModel.ID> {
+        Set(SpeechModelCatalog.curated.map(\.id))
+    }
+
+    func fetchSupportedModelIDs() async -> Set<SpeechModel.ID> {
+        supportedModelIDs()
+    }
+
+    func fetchArtifact(of model: SpeechModel) async throws -> ModelArtifact {
+        Self.artifact(of: model.id)
+    }
+
+    func availableCapacity() async throws -> Int64 {
+        214_000_000_000
+    }
+
+    func download(
+        _ model: SpeechModel,
+        artifact: ModelArtifact,
+        onProgress: @escaping @Sendable (ModelDownloadProgress) -> Void
+    ) async throws {
+        let steps: Int64 = 150
+        for step in 0...steps {
+            try await Task.sleep(for: .milliseconds(200))
+            let completed = artifact.totalBytes * step / steps
+            onProgress(ModelDownloadProgress(completedBytes: completed, totalBytes: artifact.totalBytes))
+        }
+    }
+
+    func verify(
+        _ model: SpeechModel,
+        against artifact: ModelArtifact,
+        depth: ModelVerificationDepth
+    ) async throws -> Int64 {
+        if depth == .full {
+            try await Task.sleep(for: .seconds(2))
+        }
+        return artifact.totalBytes
+    }
+
+    func inspect(_ model: SpeechModel) async -> ModelDiskInspection {
+        let isInstalled = installedIDs.contains(model.id)
+        return ModelDiskInspection(hasFiles: isInstalled, bytes: isInstalled ? Self.sampleSizes[model.id] ?? 0 : 0)
+    }
+
+    func removeFiles(of model: SpeechModel, includingTokenizer: Bool) async throws {}
+
+    func resolve(_ model: SpeechModel) -> ResolvedSpeechModel {
+        ResolvedSpeechModel(id: model.id, modelFolder: storageLocation, tokenizerBase: storageLocation)
+    }
+
+    func diskUsage() async -> Int64 {
+        installedIDs.reduce(0) { $0 + (Self.sampleSizes[$1] ?? 0) }
+    }
+
+    static func artifact(of id: SpeechModel.ID) -> ModelArtifact {
+        ModelArtifact(
+            files: [ModelArtifact.File(path: "sample/\(id)", sizeBytes: sampleSizes[id] ?? 0, sha256: nil)]
+        )
+    }
+}
+
+private final class PreviewModelRegistryStore: ModelRegistryStore {
+    private let registry: ModelRegistry
+
+    init(installedIDs: [SpeechModel.ID]) {
+        var registry = ModelRegistry(artifactSizes: SimulatedModelProvider.sampleSizes)
+        for id in installedIDs {
+            registry.installations[id] = ModelInstallation(
+                installedAt: .distantPast,
+                artifact: SimulatedModelProvider.artifact(of: id)
             )
-        ],
-        initialModelStates: [
-            "tiny": .notInstalled,
-            "base": .installed,
-            "small": .preparing(progress: 0.3),
-            "medium": .downloading(progress: 0.38),
-            "turbo": .installed,
-            "large": .notInstalled
-        ],
-        defaultModelID: "turbo",
-        embeddingModelSummary: "Multilingual MiniLM L12 · 118 MB · 50+ languages",
-        embeddingSizeMegabytes: 118,
-        languages: [
-            TranscriptionLanguage(code: nil, name: "Auto-detect"),
-            TranscriptionLanguage(code: "en", name: "English"),
-            TranscriptionLanguage(code: "de", name: "Deutsch"),
-            TranscriptionLanguage(code: "es", name: "Español"),
-            TranscriptionLanguage(code: "fr", name: "Français"),
-            TranscriptionLanguage(code: "ja", name: "日本語"),
-            TranscriptionLanguage(code: "uk", name: "Українська")
-        ],
-        licenses: [
-            ThirdPartyLicense(name: "whisper.cpp", license: "MIT"),
-            ThirdPartyLicense(name: "OpenAI Whisper models", license: "MIT"),
-            ThirdPartyLicense(name: "Multilingual MiniLM L12", license: "Apache 2.0"),
-            ThirdPartyLicense(name: "GRDB.swift", license: "MIT"),
-            ThirdPartyLicense(name: "Sparkle", license: "MIT"),
-            ThirdPartyLicense(name: "swift-collections", license: "Apache 2.0")
-        ],
-        location: StorageLocation(path: "~/Movies/Verbatim", volumeName: "Macintosh HD", freeBytes: 214_000_000_000),
-        proposedLocation: StorageLocation(
-            path: "/Volumes/Archive/Verbatim",
-            volumeName: "Archive",
-            freeBytes: 1_600_000_000_000
-        ),
-        recordingCount: 48,
-        recordingsMegabytes: 38_200,
-        searchIndexMegabytes: 186,
-        previewCacheMegabytes: 224,
-        missingRecordingCount: 2,
-        version: "1.2.0",
-        build: "142",
-        lastUpdateCheck: "09:14",
-        sourceCodeURL: URL(string: "https://github.com/verbatim-app/verbatim")
-    )
+        }
+        self.registry = registry
+    }
+
+    func load() async throws -> ModelRegistry {
+        registry
+    }
+
+    func save(_ registry: ModelRegistry) async throws {}
+}
+
+private final class PreviewSettingsRepository: SettingsRepository {
+    private let selectedModelID: Mutex<SpeechModel.ID?>
+    private let settings = Mutex(AppSettings())
+
+    init(selectedModelID: SpeechModel.ID?) {
+        self.selectedModelID = Mutex(selectedModelID)
+    }
+
+    func loadSettings() -> AppSettings {
+        settings.withLock { $0 }
+    }
+
+    func saveSettings(_ settings: AppSettings) {
+        self.settings.withLock { $0 = settings }
+    }
+
+    func loadSelectedModelID() -> SpeechModel.ID? {
+        selectedModelID.withLock { $0 }
+    }
+
+    func saveSelectedModelID(_ id: SpeechModel.ID?) {
+        selectedModelID.withLock { $0 = id }
+    }
+}
+
+private final class PreviewLoginItem: LoginItemControlling {
+    private let current = Mutex(LoginItemStatus.enabled)
+
+    func status() -> LoginItemStatus {
+        current.withLock { $0 }
+    }
+
+    func setEnabled(_ isEnabled: Bool) throws {
+        current.withLock { $0 = isEnabled ? .enabled : .disabled }
+    }
+}
+
+private struct PreviewRecordingsStorage: RecordingsStorageProviding {
+    func recordingsStorage() async throws -> RecordingsStorage {
+        RecordingsStorage(
+            location: RecordingLocation(
+                url: URL(filePath: "/tmp/verbatim-settings-preview", directoryHint: .isDirectory),
+                displayPath: "~/Movies/Verbatim",
+                availableBytes: 214_000_000_000,
+                isAccessible: true
+            ),
+            recordingCount: 48,
+            usedBytes: 38_200_000_000
+        )
+    }
+}
+
+private struct PreviewSystemActions: SystemActions {
+    func open(_ pane: SystemSettingsPane) async {}
+    func openInFinder(_ url: URL) async {}
+    func revealInFinder(_ url: URL) async {}
+    func openFile(_ url: URL) async -> Bool { false }
 }
