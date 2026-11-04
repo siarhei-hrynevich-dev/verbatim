@@ -1,0 +1,25 @@
+included:
+  - Recorder
+  - RecorderTests
+excluded:
+  - DerivedData
+  - .build
+  - build
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - sorted_imports
+analyzer_rules:
+  - unused_import
+line_length:
+  warning: 120
+  error: 160
+file_length:
+  warning: 400
+  error: 600
+function_body_length:
+  warning: 50
+  error: 80
+identifier_name:
+  excluded:
+    - id

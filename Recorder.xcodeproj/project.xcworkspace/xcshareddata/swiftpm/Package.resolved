@@ -1,0 +1,33 @@
+{
+  "originHash" : "ad879f168ef8101bf07867ad85e729b4fa59ad5a206db5da2504513915ec155d",
+  "pins" : [
+    {
+      "identity" : "argmax-oss-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/argmaxinc/argmax-oss-swift",
+      "state" : {
+        "revision" : "1bbc57cb7fe6410248a685b1c5a3c6d56adc2ed4",
+        "version" : "1.1.1"
+      }
+    },
+    {
+      "identity" : "sqliteveckit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/carlosypunto/SQLiteVecKit",
+      "state" : {
+        "revision" : "07c446657c25a521ab88475fa1bb899b4d19f5eb",
+        "version" : "0.1.1"
+      }
+    },
+    {
+      "identity" : "swift-argument-parser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-argument-parser.git",
+      "state" : {
+        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "version" : "1.8.2"
+      }
+    }
+  ],
+  "version" : 3
+}

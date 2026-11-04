@@ -1,0 +1,541 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		56AD9CF0E9E6621283756CDB /* Recording.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21B3E0A7C5983867102572E2 /* Recording.swift */; };
+		779372D83A1C27E1E635768C /* PlaceholderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6115C281C1DA4A0051BDECFF /* PlaceholderView.swift */; };
+		7C079A71A07A9D1896DEBD45 /* RecordingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB15D479C19D6EFC89172E6B /* RecordingTests.swift */; };
+		7CB6EB87D0C26A80E24E63EE /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A4B7878303EF3FE20802A06 /* Cocoa.framework */; };
+		81810640130EC31E624CD43C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E5C5CF8BC9ED7F7AFE5DF6C9 /* Assets.xcassets */; };
+		82E543DA268CF3F705C07FF3 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A4B7878303EF3FE20802A06 /* Cocoa.framework */; };
+		950186592934EDEB87032C4E /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 804B1CEEF396BE80BFDAB164 /* WhisperKit */; };
+		9CF3DED852C5D9ED6A42C2CA /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = C3FCFFB805872854135F4CB6 /* WhisperKit */; };
+		A1DDAA20251B52FDCD6DD878 /* SQLiteVecStore in Frameworks */ = {isa = PBXBuildFile; productRef = 2D32D0047D2E61D77EA61E2B /* SQLiteVecStore */; };
+		AC72152FC0152786EB1CE11A /* RecorderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB2BAA8598C2E29A1B2D58D /* RecorderApp.swift */; };
+		B7BB66E1696ADC539E87CD60 /* SQLiteVecStore in Frameworks */ = {isa = PBXBuildFile; productRef = DBFF886FC0725B290D635FC6 /* SQLiteVecStore */; };
+		C0D96A3729E20A3F90BEE711 /* DependencySmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FDE4CE5E089C49865BC7422 /* DependencySmokeTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1FCCDE7C0E3A57AE538434E7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 99D5474B995025B1385D5EA9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E970E7F6856C5CFEBD3C100C;
+			remoteInfo = Recorder;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0FDE4CE5E089C49865BC7422 /* DependencySmokeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DependencySmokeTests.swift; sourceTree = "<group>"; };
+		21B3E0A7C5983867102572E2 /* Recording.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Recording.swift; path = Models/Recording.swift; sourceTree = "<group>"; };
+		2DD73C4803924CEFB6A21564 /* Recorder.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = Recorder.entitlements; sourceTree = "<group>"; };
+		5FB2BAA8598C2E29A1B2D58D /* RecorderApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecorderApp.swift; sourceTree = "<group>"; };
+		6115C281C1DA4A0051BDECFF /* PlaceholderView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PlaceholderView.swift; path = App/PlaceholderView.swift; sourceTree = "<group>"; };
+		691C0F504E7CC0D3A56BFBF1 /* RecorderTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RecorderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9A4B7878303EF3FE20802A06 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		DC17DC6C281BB394D7C55E5A /* Recorder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Recorder.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E5C5CF8BC9ED7F7AFE5DF6C9 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Resources/Assets.xcassets; sourceTree = "<group>"; };
+		EB15D479C19D6EFC89172E6B /* RecordingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecordingTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		72284C799E7D6B61DD036DD9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7CB6EB87D0C26A80E24E63EE /* Cocoa.framework in Frameworks */,
+				9CF3DED852C5D9ED6A42C2CA /* WhisperKit in Frameworks */,
+				B7BB66E1696ADC539E87CD60 /* SQLiteVecStore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		92EFE5CD099C2D7A18239BE4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				82E543DA268CF3F705C07FF3 /* Cocoa.framework in Frameworks */,
+				950186592934EDEB87032C4E /* WhisperKit in Frameworks */,
+				A1DDAA20251B52FDCD6DD878 /* SQLiteVecStore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1BB06EE339D4323DFBA8DEBE /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				59D3F81FA6F40759531DBC85 /* OS X */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		576ADDDFB3518F7347302A54 /* RecorderTests */ = {
+			isa = PBXGroup;
+			children = (
+				EB15D479C19D6EFC89172E6B /* RecordingTests.swift */,
+				0FDE4CE5E089C49865BC7422 /* DependencySmokeTests.swift */,
+			);
+			name = RecorderTests;
+			path = RecorderTests;
+			sourceTree = "<group>";
+		};
+		59D3F81FA6F40759531DBC85 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				9A4B7878303EF3FE20802A06 /* Cocoa.framework */,
+			);
+			name = "OS X";
+			sourceTree = "<group>";
+		};
+		5F1A33E8A208AD823CF740B2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				DC17DC6C281BB394D7C55E5A /* Recorder.app */,
+				691C0F504E7CC0D3A56BFBF1 /* RecorderTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5F7801FFB4D2D4AA85FCB505 = {
+			isa = PBXGroup;
+			children = (
+				5F1A33E8A208AD823CF740B2 /* Products */,
+				1BB06EE339D4323DFBA8DEBE /* Frameworks */,
+				8B2F80DF976199FA9C1F102A /* Recorder */,
+				576ADDDFB3518F7347302A54 /* RecorderTests */,
+			);
+			sourceTree = "<group>";
+		};
+		8B2F80DF976199FA9C1F102A /* Recorder */ = {
+			isa = PBXGroup;
+			children = (
+				5FB2BAA8598C2E29A1B2D58D /* RecorderApp.swift */,
+				6115C281C1DA4A0051BDECFF /* PlaceholderView.swift */,
+				21B3E0A7C5983867102572E2 /* Recording.swift */,
+				2DD73C4803924CEFB6A21564 /* Recorder.entitlements */,
+				E5C5CF8BC9ED7F7AFE5DF6C9 /* Assets.xcassets */,
+			);
+			name = Recorder;
+			path = Recorder;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		8514082B64D640CD5988BEB7 /* RecorderTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C069B104143D83448F7B8FB3 /* Build configuration list for PBXNativeTarget "RecorderTests" */;
+			buildPhases = (
+				655BC167F8114BE018D9521C /* Sources */,
+				92EFE5CD099C2D7A18239BE4 /* Frameworks */,
+				6F7E103E11AA06CAC76A31F6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D73870A93F56DB012B97F469 /* PBXTargetDependency */,
+			);
+			name = RecorderTests;
+			packageProductDependencies = (
+				804B1CEEF396BE80BFDAB164 /* WhisperKit */,
+				2D32D0047D2E61D77EA61E2B /* SQLiteVecStore */,
+			);
+			productName = RecorderTests;
+			productReference = 691C0F504E7CC0D3A56BFBF1 /* RecorderTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		E970E7F6856C5CFEBD3C100C /* Recorder */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A0E526878068F72E1A6435C4 /* Build configuration list for PBXNativeTarget "Recorder" */;
+			buildPhases = (
+				5FA6AE7FD1E4B60DDAFAA46E /* Sources */,
+				72284C799E7D6B61DD036DD9 /* Frameworks */,
+				4620A2BF495FEAC6F58467AF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Recorder;
+			packageProductDependencies = (
+				C3FCFFB805872854135F4CB6 /* WhisperKit */,
+				DBFF886FC0725B290D635FC6 /* SQLiteVecStore */,
+			);
+			productName = Recorder;
+			productReference = DC17DC6C281BB394D7C55E5A /* Recorder.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		99D5474B995025B1385D5EA9 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 2630;
+			};
+			buildConfigurationList = C73E3A773634FA041CC3FF6F /* Build configuration list for PBXProject "Recorder" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 5F7801FFB4D2D4AA85FCB505;
+			minimizedProjectReferenceProxies = 0;
+			packageReferences = (
+				FDF523194E6D67B91A4CD799 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
+				98E99889498C068B03C83810 /* XCRemoteSwiftPackageReference "SQLiteVecKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 5F1A33E8A208AD823CF740B2 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E970E7F6856C5CFEBD3C100C /* Recorder */,
+				8514082B64D640CD5988BEB7 /* RecorderTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4620A2BF495FEAC6F58467AF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				81810640130EC31E624CD43C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6F7E103E11AA06CAC76A31F6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5FA6AE7FD1E4B60DDAFAA46E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC72152FC0152786EB1CE11A /* RecorderApp.swift in Sources */,
+				779372D83A1C27E1E635768C /* PlaceholderView.swift in Sources */,
+				56AD9CF0E9E6621283756CDB /* Recording.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		655BC167F8114BE018D9521C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7C079A71A07A9D1896DEBD45 /* RecordingTests.swift in Sources */,
+				C0D96A3729E20A3F90BEE711 /* DependencySmokeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D73870A93F56DB012B97F469 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Recorder;
+			target = E970E7F6856C5CFEBD3C100C /* Recorder */;
+			targetProxy = 1FCCDE7C0E3A57AE538434E7 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		05970F31EA0554007918ECA5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_ENTITLEMENTS = Recorder/Recorder.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Recorder uses your microphone when you choose to record microphone audio.";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.local.Recorder;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		196F60BCC08D064257B2E91D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.local.RecorderTests;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Recorder.app/Contents/MacOS/Recorder";
+			};
+			name = Debug;
+		};
+		2C31403A579A539811379D72 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		9F6264A7F4C7913A5D6A9F96 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.local.RecorderTests;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Recorder.app/Contents/MacOS/Recorder";
+			};
+			name = Release;
+		};
+		E478A660C927ACA49EEB3EA8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		FDDECD305AE98A3D11C3EDD8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_ENTITLEMENTS = Recorder/Recorder.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Recorder uses your microphone when you choose to record microphone audio.";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.local.Recorder;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A0E526878068F72E1A6435C4 /* Build configuration list for PBXNativeTarget "Recorder" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FDDECD305AE98A3D11C3EDD8 /* Release */,
+				05970F31EA0554007918ECA5 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C069B104143D83448F7B8FB3 /* Build configuration list for PBXNativeTarget "RecorderTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9F6264A7F4C7913A5D6A9F96 /* Release */,
+				196F60BCC08D064257B2E91D /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C73E3A773634FA041CC3FF6F /* Build configuration list for PBXProject "Recorder" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E478A660C927ACA49EEB3EA8 /* Debug */,
+				2C31403A579A539811379D72 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		98E99889498C068B03C83810 /* XCRemoteSwiftPackageReference "SQLiteVecKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/carlosypunto/SQLiteVecKit";
+			requirement = {
+				kind = exactVersion;
+				version = 0.1.1;
+			};
+		};
+		FDF523194E6D67B91A4CD799 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift";
+			requirement = {
+				kind = exactVersion;
+				version = 1.1.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2D32D0047D2E61D77EA61E2B /* SQLiteVecStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 98E99889498C068B03C83810 /* XCRemoteSwiftPackageReference "SQLiteVecKit" */;
+			productName = SQLiteVecStore;
+		};
+		804B1CEEF396BE80BFDAB164 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FDF523194E6D67B91A4CD799 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
+			productName = WhisperKit;
+		};
+		C3FCFFB805872854135F4CB6 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FDF523194E6D67B91A4CD799 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
+			productName = WhisperKit;
+		};
+		DBFF886FC0725B290D635FC6 /* SQLiteVecStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 98E99889498C068B03C83810 /* XCRemoteSwiftPackageReference "SQLiteVecKit" */;
+			productName = SQLiteVecStore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 99D5474B995025B1385D5EA9 /* Project object */;
+}
