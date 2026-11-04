@@ -1,5 +1,11 @@
 # Architecture
 
+## Architectural policy
+
+Follow [Software Architecture Guidelines](SOFTWARE_ARCHITECTURE_GUIDELINES.md): Lightweight Clean Architecture with MVVM for presentation. Those guidelines define dependency rules, responsibilities, dependency injection, state ownership, concurrency, errors, tests, and the agent workflow. This document applies them to Recorder and distinguishes the implemented scaffold from planned capabilities.
+
+Presentation depends on Application and Domain; Application depends on Domain. Infrastructure implements core-owned contracts. Domain has no dependencies on the other layers, and Application must not depend on concrete infrastructure. App is the composition root that wires implementations through initializer injection. These are logical boundaries in one app target, not a requirement for additional modules, protocols for every type, or a DI framework.
+
 ## Implemented foundation
 
 Recorder is a macOS 15+, arm64, Swift 6 application with a SwiftUI App lifecycle, visible Dock icon, and a minimal placeholder window. The app target links WhisperKit and SQLiteVecStore but does not instantiate either. Recording is a Codable, Sendable metadata value with an identifier, creation date, nonblank title, finite nonnegative duration, and processing status. Tests cover validation, status serialization, and package imports. Persistence decoding will need to validate untrusted stored data; synthesized Codable currently provides round trips only.
@@ -8,19 +14,23 @@ No capture engine, permission prompts, production database, models, workers, rep
 
 ## Feature and service boundaries (planned)
 
-Organize presentation under `Features/Recording`, `Features/Library`, `Features/Player`, and `Features/Settings` as each feature is built. Keep composition and lifecycle integration in App, domain values in Models, and truly reused views/extensions in Shared. Avoid empty placeholder files and speculative abstractions.
+Organize presentation under `Features/Recording`, `Features/Library`, `Features/Player`, and `Features/Settings` as each feature is built. Use layer-based `Application`, `Domain`, and `Infrastructure` directories for the core and adapters. Keep composition and lifecycle integration in App and truly reused views/extensions in Shared. Avoid empty placeholder files and speculative abstractions.
+
+The current `Recorder/Models/Recording.swift` belongs logically to Domain, and `Recorder/App/PlaceholderView.swift` belongs to Presentation. Their existing locations remain valid for the scaffold. Move relevant files when real feature work makes it useful, updating Xcode target membership; no immediate restructuring is required. New workflow code belongs in Application and framework adapters in Infrastructure rather than a generic Services directory. Application-wide dependencies are created in App and injected explicitly.
+
+Use `@MainActor @Observable` ViewModels for nontrivial presentation state and asynchronous application actions. Simple views can receive values and callbacks directly. Views and ViewModels must not instantiate infrastructure or own workflows that must survive window closure.
 
 Services will own these responsibilities:
 
-| Service | Responsibility |
+| Component | Responsibility |
 | --- | --- |
-| CaptureService | ScreenCaptureKit session, screen/window/system audio and microphone capture, media finalization |
-| TranscriptionService | On-demand offline WhisperKit processing and timestamped transcript segments |
-| EmbeddingService | On-demand Core ML inference, model load/unload, replaceable embedding implementation |
-| PersistenceService | SQLite metadata, file references, transcript segments, FTS5 and sqlite-vec indexes |
-| ProcessingCoordinator | Durable sequential jobs, resource arbitration, cancellation, retries and recovery |
+| CaptureService | Infrastructure adapter: ScreenCaptureKit session, screen/window/system audio and microphone capture, media finalization |
+| TranscriptionService | Infrastructure adapter: on-demand offline WhisperKit processing and timestamped transcript segments |
+| EmbeddingService | Infrastructure adapter: on-demand Core ML inference, model load/unload, replaceable embedding implementation |
+| PersistenceService | Infrastructure implementation: SQLite metadata, file references, transcript segments, FTS5 and sqlite-vec indexes |
+| ProcessingCoordinator | Application workflow: durable sequential jobs, resource arbitration, cancellation, retries and recovery through core contracts |
 
-Introduce protocols when an actual substitution or testing need appears. Native frameworks come from the SDK; import ScreenCaptureKit, AVFoundation, AVKit, CoreMedia, CoreAudio, CoreML, Accelerate, and AppKit only where required.
+Application services orchestrate capture and processing through meaningful contracts owned by Application or Domain; infrastructure implements those contracts and keeps framework-specific types inside adapters. Domain owns business validation and state transition rules. Introduce protocols when an actual architectural boundary, substitution, or testing need appears. Native frameworks come from the SDK; import ScreenCaptureKit, AVFoundation, AVKit, CoreMedia, CoreAudio, CoreML, Accelerate, and AppKit only where required.
 
 ## Recording and processing lifecycles (planned)
 

@@ -10,6 +10,10 @@ A native Swift 6 / SwiftUI macOS screen recorder foundation. Initialization incl
 
 Select your full Xcode installation using `xcode-select` if needed; accept its license and complete first launch. No development Team ID is committed.
 
+## Documentation before coding
+
+Before writing or changing code, read [AGENTS.md](AGENTS.md), this README, the [Software Architecture Guidelines](Docs/SOFTWARE_ARCHITECTURE_GUIDELINES.md), the [Project Architecture](Docs/ARCHITECTURE.md), and [Swift Code Style](Docs/CODE_STYLE.md). The guidelines define Lightweight Clean Architecture with MVVM; the project architecture records its application here and planned runtime behavior. Code style defines readability within individual files. Review relevant existing code and tests before implementation, and update documentation when behavior or architectural decisions change.
+
 ## Development
 
 ```sh
@@ -44,7 +48,9 @@ Apple frameworks are supplied by the macOS SDK: ScreenCaptureKit, AVFoundation, 
 - `Recorder/Models`: value types and validation.
 - `Recorder/Resources`: asset catalog and future app resources.
 - `RecorderTests`: Swift Testing model and dependency smoke tests.
-- [Architecture](Docs/ARCHITECTURE.md): planned feature/service boundaries, runtime constraints, permissions, and storage.
+- [Software Architecture Guidelines](Docs/SOFTWARE_ARCHITECTURE_GUIDELINES.md): layer responsibilities, dependency rules, MVVM, injection, state, concurrency, and testing.
+- [Architecture](Docs/ARCHITECTURE.md): current scaffold, planned layers and service boundaries, runtime constraints, permissions, and storage.
+- [Swift Code Style](Docs/CODE_STYLE.md): file layout, naming, functions, control flow, comments, and review checklist.
 - [AGENTS.md](AGENTS.md): shared coding rules.
 
-Add feature and service directories when they contain real code. The placeholder window intentionally has no final design or recording controls.
+Add feature directories for Presentation and Application, Domain, and Infrastructure directories when they contain real code. Recorder/Models currently holds the initial domain value type. The placeholder window intentionally has no final design or recording controls.
