@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// Audio-only recordings: the microphone and system audio drawn as separate tracks, matching the transcript's
-/// You and System Audio labels. Click or drag across the tracks to seek.
+/// Audio-only recordings in design scenarios: the microphone and system audio drawn as separate tracks, matching the
+/// transcript's You and System Audio labels. Click or drag across the tracks to seek.
 struct ViewerWaveformView: View {
     let viewModel: ViewerViewModel
+    let recording: ViewerRecording
 
     @State private var tracksWidth: CGFloat = 0
 
@@ -58,7 +59,7 @@ struct ViewerWaveformView: View {
             .font(.system(size: 12, weight: .medium))
 
             WaveformBars(
-                levels: Waveform.levels(for: speaker, in: viewModel.recording),
+                levels: Waveform.levels(for: speaker, in: recording),
                 playedFraction: playedFraction
             )
             .frame(height: 80)
@@ -82,12 +83,12 @@ struct ViewerWaveformView: View {
             return
         }
         let fraction = min(max(value.location.x / tracksWidth, 0), 1)
-        viewModel.seek(to: fraction * viewModel.recording.waveformSpan)
+        viewModel.seek(to: fraction * recording.waveformSpan)
     }
 
     /// The tracks are drawn across the span the transcript covers; the playhead uses the same scale.
     private var playedFraction: CGFloat {
-        let span = viewModel.recording.waveformSpan
+        let span = recording.waveformSpan
         return span > 0 ? min(viewModel.position / span, 1) : 0
     }
 }

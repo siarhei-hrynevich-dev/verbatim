@@ -36,6 +36,17 @@ final class LibraryService: FinishedRecordingRegistry {
         try await repository.fetch(matching: query)
     }
 
+    /// Throws `LibraryError.recordingNotFound` when the Library has no such entry.
+    func recording(withID id: UUID) async throws -> LibraryRecording {
+        try await existingRecording(id)
+    }
+
+    /// Opens the media for reading that lasts until the returned file is closed. Reads the entry afresh, so a file that
+    /// was just moved or located is found.
+    func openMedia(of id: UUID) async throws -> OpenMediaFile {
+        try await fileStore.openMedia(of: existingRecording(id))
+    }
+
     func count(matching query: RecordingQuery) async throws -> Int {
         try await repository.count(matching: query)
     }
@@ -144,7 +155,8 @@ final class LibraryService: FinishedRecordingRegistry {
         let recording = try await existingRecording(id)
         let filesLeftBehind = try await fileStore.moveToTrash(recording)
         await thumbnails.discardThumbnail(for: id)
-        revision += 1
+        // Advances once the entry is settled either way, so whoever reloads sees the outcome.
+        defer { revision += 1 }
         do {
             try await repository.delete(id: id)
         } catch {
@@ -156,12 +168,18 @@ final class LibraryService: FinishedRecordingRegistry {
 
     // MARK: - Finder
 
-    func open(_ id: UUID) async throws {
-        try await fileStore.open(existingRecording(id))
-    }
-
     func reveal(_ id: UUID) async throws {
         try await fileStore.reveal(existingRecording(id))
+    }
+
+    /// Throws `LibraryError.mediaUnavailable(.missing)` when the recording has no transcript file.
+    func revealTranscript(of id: UUID) async throws {
+        let recording = try await existingRecording(id)
+        let inspection = await fileStore.inspect(recording)
+        guard let fileName = RecordingFileLayout.transcriptFileName(in: inspection.fileNames) else {
+            throw LibraryError.mediaUnavailable(.missing)
+        }
+        try await fileStore.revealFile(named: fileName, besideMediaOf: recording)
     }
 
     func openFolder(of id: UUID) async throws {

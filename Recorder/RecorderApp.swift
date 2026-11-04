@@ -3,9 +3,6 @@ import SwiftUI
 @main
 struct RecorderApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var viewerViewModel = ViewerViewModel(
-        scenario: ViewerPreviewScenario.fromLaunchArguments() ?? .video
-    )
     @State private var settingsViewModel = SettingsViewModel(
         scenario: SettingsPreviewScenario.fromLaunchArguments() ?? .general
     )
@@ -32,7 +29,7 @@ struct RecorderApp: App {
                 DebugCommands(
                     recorderViewModel: appDelegate.recorderViewModel,
                     libraryViewModel: appDelegate.libraryViewModel,
-                    viewerViewModel: viewerViewModel,
+                    viewerViewModel: appDelegate.viewerViewModel,
                     settingsViewModel: settingsViewModel,
                     accent: $accent
                 )
@@ -44,8 +41,8 @@ struct RecorderApp: App {
                 viewModel: appDelegate.libraryViewModel,
                 accent: accent,
                 actions: LibraryWindowActions(
-                    openRecording: openRecording,
-                    openTranscript: { openInViewer($0, at: nil) },
+                    openRecording: { openRecording($0, at: $1) },
+                    openTranscript: { openRecording($0, at: nil) },
                     newRecording: navigator.showRecorder,
                     openSettings: navigator.showSettings
                 )
@@ -58,17 +55,20 @@ struct RecorderApp: App {
         .restorationBehavior(.disabled)
 
         Window("Viewer", id: ViewerWindowView.windowID) {
-            // Finder actions, export and processing control are not connected yet.
+            // Export and processing control are not connected yet.
             ViewerWindowView(
-                viewModel: viewerViewModel,
+                viewModel: appDelegate.viewerViewModel,
                 accent: accent,
-                actions: ViewerWindowActions(backToLibrary: navigator.showLibrary)
+                actions: ViewerWindowActions(backToLibrary: navigator.showLibrary),
+                videoSurface: appDelegate.viewerVideoSurface
             )
             .installsNavigation(into: navigator)
         }
         .defaultSize(width: ViewerLayout.windowWidth, height: ViewerLayout.windowHeight)
         .windowToolbarStyle(.unified(showsTitle: false))
         .restorationBehavior(.disabled)
+        // Windows other than the app's first scene are auxiliary by default, and those cannot enter full screen.
+        .windowManagerRole(.principal)
 
         // Opened from the Recorder gear, the Library sidebar, the Dock menu or ⌘,.
         Settings {
@@ -76,22 +76,17 @@ struct RecorderApp: App {
         }
     }
 
-    /// The Viewer only simulates playback so far, so real recordings open in the system's media player. Sample
-    /// recordings keep going to the Viewer for design review.
+    /// Shows a recording in the Viewer, at a transcript position when one is given. The Library's sample recordings
+    /// have no entry to look up, so its design scenarios hand over the sample itself.
     private func openRecording(_ id: LibraryItem.ID, at timestamp: TimeInterval?) {
-        if appDelegate.libraryViewModel.isPreviewing {
-            openInViewer(id, at: timestamp)
+        let library = appDelegate.libraryViewModel
+        if !library.isPreviewing {
+            appDelegate.viewerViewModel.open(recordingID: id, at: timestamp)
+        } else if let sample = library.items.first(where: { $0.id == id }) {
+            appDelegate.viewerViewModel.open(sample, at: timestamp)
         } else {
-            appDelegate.libraryViewModel.openInSystemPlayer(id)
-        }
-    }
-
-    /// Shows a sample recording in the Viewer, at a transcript position when one is given.
-    private func openInViewer(_ id: LibraryItem.ID, at timestamp: TimeInterval?) {
-        guard let item = appDelegate.libraryViewModel.items.first(where: { $0.id == id }) else {
             return
         }
-        viewerViewModel.open(item, at: timestamp)
         navigator.showViewer()
     }
 

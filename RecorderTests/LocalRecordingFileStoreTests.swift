@@ -98,15 +98,10 @@ struct LocalRecordingFileStoreTests {
         let recording = try environment.makeRecording()
 
         try await store.reveal(recording)
-        try await store.open(recording)
         try await store.openFolder(of: recording)
 
         #expect(await environment.finder.state.revealed == [recording.media.url])
-        #expect(
-            await environment.finder.state.opened == [
-                recording.media.url, recording.media.url.deletingLastPathComponent()
-            ]
-        )
+        #expect(await environment.finder.state.opened == [recording.media.url.deletingLastPathComponent()])
     }
 
     @Test func finderActionsNeedTheFile() async throws {

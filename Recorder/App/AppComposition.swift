@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// The composition root: connects the app's concrete services to the contracts the app core depends on.
 @MainActor
@@ -7,13 +7,17 @@ enum AppComposition {
     struct ViewModels {
         let recorder: RecorderViewModel
         let library: LibraryViewModel
+        let viewer: ViewerViewModel
+        /// Renders the Viewer's video. Created here because it is the one view tied to the concrete player.
+        let viewerVideoSurface: AnyView
     }
 
     /// With a scenario, a window starts on that design state; capture and the library stay untouched unless the user
     /// returns to Live.
     static func makeViewModels(
         recorderScenario: RecorderPreviewScenario?,
-        libraryScenario: LibraryPreviewScenario?
+        libraryScenario: LibraryPreviewScenario?,
+        viewerScenario: ViewerPreviewScenario?
     ) -> ViewModels {
         let engine = ScreenCaptureEngine()
         let permissions = SystemCapturePermissions()
@@ -46,9 +50,12 @@ enum AppComposition {
         if let recorderScenario {
             recorder.apply(recorderScenario)
         }
+        let playback = AVPlaybackService()
         return ViewModels(
             recorder: recorder,
-            library: LibraryViewModel(service: library, previewScenario: libraryScenario)
+            library: LibraryViewModel(service: library, previewScenario: libraryScenario),
+            viewer: ViewerViewModel(library: library, playback: playback, previewScenario: viewerScenario),
+            viewerVideoSurface: AnyView(AVPlayerSurface(service: playback))
         )
     }
 }

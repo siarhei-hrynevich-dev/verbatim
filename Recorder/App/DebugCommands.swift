@@ -41,6 +41,10 @@
                 }
 
                 Menu("Viewer State") {
+                    Button("Live") {
+                        viewerViewModel.endPreview()
+                        openWindow(id: ViewerWindowView.windowID)
+                    }
                     ForEach(ViewerPreviewScenario.allCases) { scenario in
                         Button(scenario.title) {
                             viewerViewModel.apply(scenario)

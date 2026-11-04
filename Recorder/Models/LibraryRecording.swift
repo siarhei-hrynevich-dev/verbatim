@@ -74,6 +74,22 @@ struct MediaSnapshot: Equatable, Sendable {
     var duration: TimeInterval?
 }
 
+/// A recording's media, kept reachable for as long as something reads it. A security-scoped bookmark's access lasts
+/// until `close()`, which the owner calls exactly once.
+struct OpenMediaFile: Sendable {
+    let url: URL
+    private let closeAccess: @Sendable () -> Void
+
+    init(url: URL, closeAccess: @escaping @Sendable () -> Void) {
+        self.url = url
+        self.closeAccess = closeAccess
+    }
+
+    func close() {
+        closeAccess()
+    }
+}
+
 /// Failures of the Library's persistence and file operations.
 enum LibraryError: Error, Equatable, Sendable {
     case databaseUnavailable(detail: String)
@@ -93,5 +109,4 @@ enum LibraryError: Error, Equatable, Sendable {
     /// The files are in the Trash, but the entry could not be removed; it will show as missing.
     case entryKeptAfterTrash(detail: String)
     case folderUnavailable
-    case openFailed
 }

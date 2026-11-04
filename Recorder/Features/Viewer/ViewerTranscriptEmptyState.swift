@@ -1,12 +1,43 @@
 import SwiftUI
 
-/// The transcript panel before a transcript exists: processing with progress, failed with Retry, or not
-/// processed with Generate Transcript. Playback works in every case.
+/// The transcript panel before a transcript exists. Real recordings say so plainly, since nothing can make one yet.
+/// Design scenarios also show processing with progress, failed with Retry, and not processed with Generate Transcript.
+/// Playback works in every case.
 struct ViewerTranscriptEmptyState: View {
     let viewModel: ViewerViewModel
     let actions: ViewerWindowActions
 
     var body: some View {
+        if state == .unavailable {
+            unavailable
+        } else {
+            designedStates
+        }
+    }
+
+    private var unavailable: some View {
+        VStack(spacing: 10) {
+            IconView(.file, size: 36)
+                .foregroundStyle(VerbatimColor.tertiaryText)
+            Text("No transcript available")
+                .font(.system(size: 15, weight: .bold))
+                .padding(.top, 4)
+                .accessibilityAddTraits(.isHeader)
+            Text("Transcription will be available after this recording is processed.")
+                .font(.system(size: 12))
+                .lineSpacing(4)
+                .foregroundStyle(VerbatimColor.secondaryText)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 290)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 24)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 60)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var designedStates: some View {
         VStack(spacing: 10) {
             IconView(icon, size: 36)
                 .foregroundStyle(iconColor)
@@ -47,7 +78,7 @@ struct ViewerTranscriptEmptyState: View {
     }
 
     private var state: ViewerRecording.TranscriptState {
-        viewModel.recording.transcriptState
+        viewModel.recording?.transcriptState ?? .unavailable
     }
 
     private func progressDetails(_ progress: Double) -> some View {
@@ -79,7 +110,7 @@ struct ViewerTranscriptEmptyState: View {
         switch state {
         case .processing, .ready: .loader
         case .failed: .alert
-        case .notProcessed: .file
+        case .notProcessed, .unavailable: .file
         }
     }
 
@@ -87,7 +118,7 @@ struct ViewerTranscriptEmptyState: View {
         switch state {
         case .processing, .ready: VerbatimColor.accent
         case .failed: VerbatimColor.red
-        case .notProcessed: VerbatimColor.tertiaryText
+        case .notProcessed, .unavailable: VerbatimColor.tertiaryText
         }
     }
 
@@ -97,7 +128,7 @@ struct ViewerTranscriptEmptyState: View {
             String(localized: "Transcribing on this Mac")
         case .failed(let position):
             String(localized: "Transcription failed at \(RecordingClock.timerText(for: position))")
-        case .notProcessed:
+        case .notProcessed, .unavailable:
             String(localized: "Not processed")
         }
     }
@@ -106,7 +137,7 @@ struct ViewerTranscriptEmptyState: View {
         switch state {
         case .processing, .ready: VerbatimColor.primaryText
         case .failed: VerbatimColor.red
-        case .notProcessed: VerbatimColor.secondaryText
+        case .notProcessed, .unavailable: VerbatimColor.secondaryText
         }
     }
 
@@ -125,7 +156,7 @@ struct ViewerTranscriptEmptyState: View {
                     normally.
                     """
             )
-        case .notProcessed:
+        case .notProcessed, .unavailable:
             notProcessedMessage
         }
     }
@@ -146,7 +177,7 @@ struct ViewerTranscriptEmptyState: View {
         switch state {
         case .processing, .ready: .pause
         case .failed: .retry
-        case .notProcessed: .file
+        case .notProcessed, .unavailable: .file
         }
     }
 
@@ -154,7 +185,7 @@ struct ViewerTranscriptEmptyState: View {
         switch state {
         case .processing, .ready: String(localized: "Pause Processing")
         case .failed: String(localized: "Retry Processing")
-        case .notProcessed: String(localized: "Generate Transcript")
+        case .notProcessed, .unavailable: String(localized: "Generate Transcript")
         }
     }
 
@@ -162,14 +193,14 @@ struct ViewerTranscriptEmptyState: View {
         switch state {
         case .processing, .ready: String(localized: "Show in Library")
         case .failed: String(localized: "Show Log")
-        case .notProcessed: String(localized: "Language: Auto-detect")
+        case .notProcessed, .unavailable: String(localized: "Language: Auto-detect")
         }
     }
 
     private func primaryAction() {
         switch state {
         case .processing, .ready: actions.pauseProcessing()
-        case .failed, .notProcessed: viewModel.startProcessing()
+        case .failed, .notProcessed, .unavailable: viewModel.startProcessing()
         }
     }
 
@@ -177,7 +208,7 @@ struct ViewerTranscriptEmptyState: View {
         switch state {
         case .processing, .ready: actions.backToLibrary()
         case .failed: actions.showLog()
-        case .notProcessed: actions.chooseLanguage()
+        case .notProcessed, .unavailable: actions.chooseLanguage()
         }
     }
 }

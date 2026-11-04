@@ -17,20 +17,21 @@ struct ViewerViewModelTests {
     func scenariosShowTheDesignRecording(scenario: ViewerPreviewScenario, title: String) {
         let viewModel = ViewerViewModel(previewData: data, scenario: scenario)
 
-        #expect(viewModel.recording.item.title == title)
+        #expect(viewModel.recording?.item.title == title)
         #expect(viewModel.title == title)
     }
 
     @Test func scenariosMapTranscriptStates() {
-        #expect(ViewerViewModel(previewData: data, scenario: .video).recording.transcriptState == .ready)
+        #expect(ViewerViewModel(previewData: data, scenario: .video).recording?.transcriptState == .ready)
         #expect(
-            ViewerViewModel(previewData: data, scenario: .processing).recording.transcriptState
+            ViewerViewModel(previewData: data, scenario: .processing).recording?.transcriptState
                 == .processing(progress: 0.64)
         )
         #expect(
-            ViewerViewModel(previewData: data, scenario: .failed).recording.transcriptState == .failed(stoppedAt: 1_900)
+            ViewerViewModel(previewData: data, scenario: .failed).recording?.transcriptState
+                == .failed(stoppedAt: 1_900)
         )
-        #expect(ViewerViewModel(previewData: data, scenario: .unprocessed).recording.transcriptState == .notProcessed)
+        #expect(ViewerViewModel(previewData: data, scenario: .unprocessed).recording?.transcriptState == .notProcessed)
         #expect(ViewerViewModel(previewData: data, scenario: .processing).lines.isEmpty)
     }
 
@@ -47,11 +48,11 @@ struct ViewerViewModelTests {
         viewModel.togglePlayback()
 
         viewModel.cycleSpeed()
-        viewModel.advance(by: 2)
+        viewModel.advanceSimulation(by: 2)
         #expect(viewModel.position == 83)
 
         viewModel.seek(to: viewModel.duration - 1)
-        viewModel.advance(by: 5)
+        viewModel.advanceSimulation(by: 5)
         #expect(viewModel.position == viewModel.duration)
         #expect(!viewModel.isPlaying)
     }
@@ -59,7 +60,7 @@ struct ViewerViewModelTests {
     @Test func pausedPlaybackDoesNotAdvance() {
         let viewModel = ViewerViewModel(previewData: data, scenario: .audio)
 
-        viewModel.advance(by: 10)
+        viewModel.advanceSimulation(by: 10)
 
         #expect(viewModel.position == 80)
     }
@@ -132,7 +133,7 @@ struct ViewerViewModelTests {
 
         viewModel.startProcessing()
 
-        #expect(viewModel.recording.transcriptState == .processing(progress: 0.01))
+        #expect(viewModel.recording?.transcriptState == .processing(progress: 0.01))
     }
 
     @Test func openingFromTheLibraryShowsTheTimestamp() throws {
@@ -141,7 +142,7 @@ struct ViewerViewModelTests {
 
         viewModel.open(planning, at: 3_090)
 
-        #expect(viewModel.recording.item.id == planning.id)
+        #expect(viewModel.recording?.item.id == planning.id)
         #expect(viewModel.position == 3_090)
         #expect(!viewModel.isPlaying)
         #expect(viewModel.searchText.isEmpty)

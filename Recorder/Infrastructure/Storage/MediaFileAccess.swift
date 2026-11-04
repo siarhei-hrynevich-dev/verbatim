@@ -5,7 +5,7 @@ import os
 ///
 /// The stored path is tried first, which is the common case and needs no bookmark. Otherwise the bookmark can find a
 /// file that moved, and grants access to a folder that is no longer the current recordings folder after a relaunch.
-struct MediaFileAccess {
+struct MediaFileAccess: Sendable {
     let availability: MediaAvailability
     /// Where the media is, or where it was last known to be.
     let media: MediaReference

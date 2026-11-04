@@ -62,11 +62,6 @@ struct LibraryIssue: Equatable, Sendable {
                     localized: "Check that its drive is connected, or choose another folder in the Recorder."
                 )
             )
-        case .openFailed:
-            self.init(
-                title: String(localized: "Couldn’t open the recording"),
-                message: String(localized: "macOS found no application able to open this file.")
-            )
         }
     }
 

@@ -1,6 +1,6 @@
 # Recorder
 
-A native Swift 6 / SwiftUI macOS screen recorder. The Recorder window records screens, windows and audio with ScreenCaptureKit and AVFoundation, keeping microphone and system audio as separate tracks. The Library window tracks finished recordings in a local SQLite database: history, renaming, title and date search, sorting, Finder actions, removal, deletion to the Trash, and missing-file handling. The app also has the designed Viewer and Settings windows (layout only, with simulated state), a Dock menu, menu bar recording indicator and app icon, and Swift Testing coverage. Real in-app playback, transcription, embeddings, transcript search, and processing workers are planned and are not implemented.
+A native Swift 6 / SwiftUI macOS screen recorder. The Recorder window records screens, windows and audio with ScreenCaptureKit and AVFoundation, keeping microphone and system audio as separate tracks. The Library window tracks finished recordings in a local SQLite database: history, renaming, title and date search, sorting, Finder actions, removal, deletion to the Trash, and missing-file handling. The Viewer window plays recordings with AVFoundation and AVKit: video and audio-only, with seeking, volume, speed, full screen, Finder actions and recovery from missing or damaged files. The app also has the designed Settings window (layout only, with simulated state), a Dock menu, menu bar recording indicator and app icon, and Swift Testing coverage. Transcription, embeddings, transcript search, and processing workers are planned and are not implemented.
 
 ## Requirements
 
@@ -45,10 +45,11 @@ Apple frameworks are supplied by the macOS SDK: ScreenCaptureKit, AVFoundation, 
 ## Organization
 
 - `Recorder/Features/Recording`: the Recorder window (views, `RecorderViewModel`) and, under `Preview`, the sample data and scenarios for reviewing its design states.
-- `Recorder/Application`: `RecordingCoordinator`, which owns the recording lifecycle, `LibraryService`, which owns the library's use cases, and the contracts Infrastructure implements.
-- `Recorder/Infrastructure`: capture and media output, the SQLite database, recording files and thumbnails, preferences, permissions.
+- `Recorder/Application`: `RecordingCoordinator`, which owns the recording lifecycle, `LibraryService`, which owns the library's use cases, and the contracts Infrastructure implements, including `PlaybackService`.
+- `Recorder/Infrastructure`: capture and media output, playback, the SQLite database, recording files and thumbnails, preferences, permissions.
 - `Recorder/Features/Library`: the Library window (views, `LibraryViewModel`) and, under `Preview`, its sample recordings, simulated search and scenarios.
-- `Recorder/Features/Viewer` and `Recorder/Features/Settings`: the Viewer and Settings windows, each with view models and `Preview` sample data and scenarios.
+- `Recorder/Features/Viewer`: the Viewer window, the app's player (views, `ViewerViewModel`) and, under `Preview`, its sample data and scenarios.
+- `Recorder/Features/Settings`: the Settings window, with its view model and `Preview` sample data and scenarios.
 - `Recorder/App`: the composition root (`AppComposition`) and AppKit integration: `AppDelegate` (Dock menu, quit confirmation, holder of the Recorder view model), `RecordingIndicators` (menu bar item and Dock badge while recording), `RecordingMenus`, `WindowNavigator` (opens SwiftUI windows from AppKit menus), and the Debug menu.
 - `Recorder/Shared`: design tokens (colors, icons, focus ring) and reusable components such as buttons, switches, segmented controls, callout banners and level meters.
 - `Recorder/Models`: value types and validation.
@@ -74,15 +75,17 @@ The Recorder's “01 Recorder” design states can be reviewed with sample data 
 
 ## Library window
 
-Finished recordings appear in the Library automatically. Metadata lives in `Library.sqlite` under Application Support; media stays where it was recorded. Open Recording uses the system's default player until the Viewer plays real media. Remove from Library keeps the files; Delete Recording moves them to the Trash. Files moved in Finder are followed through their bookmarks; files that cannot be found show as missing and offer Locate… and Remove from Library. Details are in [Implementation Status](Docs/IMPLEMENTATION.md).
+Finished recordings appear in the Library automatically. Metadata lives in `Library.sqlite` under Application Support; media stays where it was recorded. Open Recording plays it in the Viewer. Remove from Library keeps the files; Delete Recording moves them to the Trash. Files moved in Finder are followed through their bookmarks; files that cannot be found show as missing and offer Locate… and Remove from Library. Details are in [Implementation Status](Docs/IMPLEMENTATION.md).
 
-The “02 Library” design states remain available with sample data that touches nothing on disk, where processing, transcript search results and the Viewer are simulated. Choose a state with `-LibraryPreviewScenario <state>`, which also opens the window at launch, from **Debug › Library State** in Debug builds (**Live** returns to the real library), or in the SwiftUI previews of `LibraryWindowView`. States: `list`, `processing`, `search`, `context`, `confirm`, `empty`. In the search field, try “maya”, “search” or “budget”.
+The “02 Library” design states remain available with sample data that touches nothing on disk, where processing, transcript search results and the Viewer they open are simulated. Choose a state with `-LibraryPreviewScenario <state>`, which also opens the window at launch, from **Debug › Library State** in Debug builds (**Live** returns to the real library), or in the SwiftUI previews of `LibraryWindowView`. States: `list`, `processing`, `search`, `context`, `confirm`, `empty`. In the search field, try “maya”, “search” or “budget”.
 
 Both windows follow the system appearance and accent color. To review the design's accent tweak, pass `-VerbatimAccent blue|indigo|teal|graphite` or use **Debug › Accent Color**; **Debug › Appearance** switches Light and Dark.
 
-## Viewer window preview states
+## Viewer window
 
-The Viewer implements the “03 Viewer” design without media: playback, waveforms, transcript, search matches and processing are simulated. Choose a state with `-ViewerPreviewScenario <state>`, which also opens the window at launch, from **Debug › Viewer State**, or in the SwiftUI previews of `ViewerWindowView`. States: `video`, `search`, `audio`, `processing`, `failed`, `unprocessed`. Space plays or pauses, Left and Right skip 15 s, Return or ⌘G steps through transcript matches, and ⌘[ returns to the Library.
+Opening a recording from the Library plays it in the Viewer. It starts paused. Space plays or pauses, Left and Right skip 15 s (5 s while the position bar has focus), and ⌘[ returns to the Library, which closes the Viewer and ends playback. A file that is missing or can't be played offers Locate File…, Try Again or Show in Finder as they apply. Details are in [Implementation Status](Docs/IMPLEMENTATION.md).
+
+The “03 Viewer” design states remain available with sample data and no media: playback, waveforms, transcript, search matches and processing are simulated. Choose a state with `-ViewerPreviewScenario <state>`, which also opens the window at launch, from **Debug › Viewer State** (**Live** returns to real recordings), or in the SwiftUI previews of `ViewerWindowView`. States: `video`, `search`, `audio`, `processing`, `failed`, `unprocessed`. In those states, Return or ⌘G also steps through transcript matches.
 
 ## Dock and menu bar
 

@@ -80,10 +80,6 @@ extension LibraryViewModel {
         }
     }
 
-    func openInSystemPlayer(_ id: LibraryItem.ID) {
-        perform { try await $0.open(id) }
-    }
-
     func showInFinder(_ id: LibraryItem.ID) {
         perform { try await $0.reveal(id) }
     }

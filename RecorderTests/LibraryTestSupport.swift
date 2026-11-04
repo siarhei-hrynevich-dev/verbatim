@@ -168,8 +168,13 @@ struct TrashFailingFileStore: RecordingFileStore {
     func validateReplacement(at url: URL, for recording: LibraryRecording) async throws -> MediaSnapshot {
         try await base.validateReplacement(at: url, for: recording)
     }
-    func open(_ recording: LibraryRecording) async throws { try await base.open(recording) }
+    func openMedia(of recording: LibraryRecording) async throws -> OpenMediaFile {
+        try await base.openMedia(of: recording)
+    }
     func reveal(_ recording: LibraryRecording) async throws { try await base.reveal(recording) }
+    func revealFile(named fileName: String, besideMediaOf recording: LibraryRecording) async throws {
+        try await base.revealFile(named: fileName, besideMediaOf: recording)
+    }
     func openFolder(of recording: LibraryRecording) async throws { try await base.openFolder(of: recording) }
     func openFolder(at url: URL) async throws { try await base.openFolder(at: url) }
     func moveToTrash(_ recording: LibraryRecording) async throws -> [String] {

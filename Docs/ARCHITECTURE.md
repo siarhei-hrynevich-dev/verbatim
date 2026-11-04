@@ -8,11 +8,11 @@ Presentation depends on Application and Domain; Application depends on Domain. I
 
 ## Current state
 
-What exists in the code today (recording, windows, simulated state, App integration, models, tests) is described in [Implementation Status](IMPLEMENTATION.md). This document describes the target architecture; sections marked "planned" are intended future behavior, not current behavior. Recording capture, its lifecycle, media finalization and the recording library's SQLite persistence are implemented; processing, transcripts and vector indexes are not.
+What exists in the code today (recording, windows, simulated state, App integration, models, tests) is described in [Implementation Status](IMPLEMENTATION.md). This document describes the target architecture; sections marked "planned" are intended future behavior, not current behavior. Recording capture, its lifecycle, media finalization, the recording library's SQLite persistence and media playback are implemented; processing, transcripts and vector indexes are not.
 
 ## Feature and service boundaries (planned)
 
-Organize presentation under `Features/Recording`, `Features/Library`, `Features/Player`, and `Features/Settings` as each feature is built. Use layer-based `Application`, `Domain`, and `Infrastructure` directories for the core and adapters. Keep composition and lifecycle integration in App and truly reused views/extensions in Shared. Avoid empty placeholder files and speculative abstractions.
+Organize presentation under `Features/Recording`, `Features/Library`, `Features/Viewer` (the player, named after its design section), and `Features/Settings` as each feature is built. Use layer-based `Application`, `Domain`, and `Infrastructure` directories for the core and adapters. Keep composition and lifecycle integration in App and truly reused views/extensions in Shared. Avoid empty placeholder files and speculative abstractions.
 
 The `Recorder/Models` types belong logically to Domain; that location remains valid. `RecorderViewModel` receives capture, permission and storage state through injected Application contracts. Move relevant files when real feature work makes it useful, updating Xcode target membership; no immediate restructuring is required. New workflow code belongs in Application and framework adapters in Infrastructure rather than a generic Services directory. Application-wide dependencies are created in App and injected explicitly.
 
@@ -28,12 +28,19 @@ Services will own these responsibilities:
 | RecordingRepository | Application contract (implemented by `SQLiteRecordingRepository`): the `recordings` table |
 | RecordingFileStore | Application contract (implemented by `LocalRecordingFileStore`): file availability, bookmarks, Finder, the Trash |
 | RecordingMetadataStore | Application contract (implemented by `FileRecordingStore`): the `recording.json` sidecar, a snapshot taken when a recording finishes |
+| PlaybackService | Application contract (implemented by `AVPlaybackService`): one media file at a time, its timeline, and what happens to it. Knows nothing about recordings or transcripts |
 | TranscriptionService | Infrastructure adapter: on-demand offline WhisperKit processing and timestamped transcript segments |
 | EmbeddingService | Infrastructure adapter: on-demand Core ML inference, model load/unload, replaceable embedding implementation |
 | PersistenceService | Infrastructure implementation: transcript segments, FTS5 and sqlite-vec indexes, in the application database or beside it |
 | ProcessingCoordinator | Application workflow: durable sequential jobs, resource arbitration, cancellation, retries and recovery through core contracts |
 
 Application services orchestrate capture and processing through meaningful contracts owned by Application or Domain; infrastructure implements those contracts and keeps framework-specific types inside adapters. Domain owns business validation and state transition rules. Introduce protocols when an actual architectural boundary, substitution, or testing need appears. Native frameworks come from the SDK; import ScreenCaptureKit, AVFoundation, AVKit, CoreMedia, CoreAudio, CoreML, Accelerate, and AppKit only where required.
+
+## Playback
+
+`ViewerViewModel` owns one playback session: from opening a recording by its identifier until the next one opens, the window closes or playback fails. It reads metadata and opens the media through `LibraryService`, which stays the only owner of both, and plays through `PlaybackService`, which keeps `AVPlayer` inside Infrastructure. `PlaybackState` in Domain states which transitions exist. App injects the one view tied to the concrete player, `AVPlayerSurface`, so that Presentation has no AVFoundation dependency.
+
+The contract's callback and `AVPlayer` are main-actor bound because the player drives on-screen rendering. A transcript needs nothing further from the engine: `PlaybackEvent.timeChanged`, `currentTime` and `seek(to:precision:)` are its timeline, and the view model already derives the active line and seeking to a line from `lines`. Loading real segments means filling `ViewerRecording.transcript` and setting its state to `ready`; the engine stays independent of WhisperKit and transcript storage.
 
 ## Recording and processing lifecycles (planned)
 
@@ -63,7 +70,7 @@ Use async/await, structured tasks and task groups where appropriate. Actors own 
 
 ## Lifecycle and native interaction (planned)
 
-Keep SwiftUI App lifecycle and a regular Dock application. Add an AppKit delegate only where native integration requires it. Dock activation reopens the Recorder window; the Dock menu, menu bar item and quit confirmation are driven by the real recording state, and recording continues with closed windows. Do not introduce LSUIElement agent mode or custom Dock UI.
+Keep SwiftUI App lifecycle and a regular Dock application. Add an AppKit delegate only where native integration requires it. Dock activation reopens the Recorder window; the Dock menu, menu bar item and quit confirmation are driven by the real recording state, and recording continues with closed windows. The Viewer's scene has the `principal` window manager role, because auxiliary windows cannot enter full screen. Do not introduce LSUIElement agent mode or custom Dock UI.
 
 ## Sandbox and contextual permissions
 

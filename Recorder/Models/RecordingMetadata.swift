@@ -6,10 +6,15 @@ enum RecordingFileLayout {
     /// QuickTime for audio-only recordings too: MPEG-4 audio files lose the track names that keep the microphone
     /// and system audio identifiable.
     static let mediaFileName = "recording.mov"
+    /// Plain text first: it is the one a person most likely wants to find.
+    static let transcriptFileNames = ["transcript.txt", "transcript.srt", "transcript.json"]
     /// Files the app writes or will write into a recording's folder besides the media.
-    static let derivedFileNames: Set<String> = [
-        metadataFileName, "transcript.json", "transcript.srt", "transcript.txt"
-    ]
+    static let derivedFileNames = Set(transcriptFileNames + [metadataFileName])
+
+    /// The transcript file among a recording's files, if it has one.
+    static func transcriptFileName(in fileNames: [String]) -> String? {
+        transcriptFileNames.first(where: fileNames.contains)
+    }
 
     static func directoryName(createdAt: Date, id: UUID, timeZone: TimeZone = .current) -> String {
         let formatter = DateFormatter()

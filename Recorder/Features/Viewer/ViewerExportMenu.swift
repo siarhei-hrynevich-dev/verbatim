@@ -1,8 +1,11 @@
 import SwiftUI
 
-/// The toolbar's Export pop-up: copy and export the transcript. Every item is disabled until a transcript exists.
+/// The toolbar's Export pop-up: copy and export the transcript, which are disabled until a transcript is loaded, and
+/// show its file, which only needs the file to exist.
 struct ViewerExportMenu: View {
     let hasTranscript: Bool
+    let canShowTranscriptInFinder: Bool
+    let showTranscriptInFinder: () -> Void
     let actions: ViewerWindowActions
 
     var body: some View {
@@ -19,8 +22,8 @@ struct ViewerExportMenu: View {
                     .disabled(!hasTranscript)
             }
             Divider()
-            Button("Show Transcript in Finder", action: actions.showTranscriptInFinder)
-                .disabled(!hasTranscript)
+            Button("Show Transcript in Finder", action: showTranscriptInFinder)
+                .disabled(!canShowTranscriptInFinder)
         } label: {
             HStack(spacing: 6) {
                 IconView(.export, size: 14)

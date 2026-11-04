@@ -70,13 +70,46 @@ The Recorder window records for real. Screen, window and audio-only recording, p
 
 **Status.** Every new recording is stored as `recorded`, shown as “Recorded”, with no Transcribe or Retry offered and no place in the Processing section, because no processing exists.
 
+## Player (implemented)
+
+The Viewer window plays recordings from the Library. The player is shared by video and audio-only recordings; only what is drawn differs.
+
+| Layer | Component | Responsibility |
+| --- | --- | --- |
+| Presentation | `ViewerViewModel` and extensions, `ViewerIssue`, `ViewerLiveMedia`, `ViewerControlHUD` | The open recording, playback state, seeking, error wording, controls. |
+| Application | `PlaybackContracts`, `LibraryService` | The `PlaybackService` contract; metadata, media access, Finder and locating, as for the Library window. |
+| Domain | `Playback` | `PlaybackState` and its transitions, `PlaybackFailure`, `PlaybackEvent`, `PlaybackMediaInfo`, `PlaybackTimeline` rules. |
+| Infrastructure | `AVPlaybackService`, `AVPlayerSurface` | `AVPlayer`, its observers and error translation; AVKit rendering. |
+
+**Opening.** The Library passes a recording's identifier. Metadata shows first, so a recording that can't play is still identified; then the media is opened with `LibraryService.openMedia(of:)`, which holds any security-scoped access until the session ends, and loaded into the player. A recording starts paused. Opening another first cancels the load, seek and observers of the last one, unloads it and clears its details, so at most one item ever exists.
+
+**State.** `idle → loading → ready → playing ⇄ paused → ended`, with `failed` reachable from anything loaded or loading. A seek moves `ready` and `ended` to `paused`. Everything else the views need derives from this.
+
+**Formats.** The Recorder writes QuickTime files with HEVC video and up to two AAC tracks; audio-only recordings have no video track. Both audio tracks are enabled with no selection group, so `AVPlayer` mixes the microphone and system audio. The picture or audio view follows what the file holds, not the recording's stored type.
+
+**Duration.** Controls and the toolbar use the media's own duration once loaded, and the stored one until then. A difference over one second is logged. The stored value is not rewritten; Locate File is what updates it. The Library's list therefore keeps showing the stored value.
+
+**Timeline.** Time reports arrive every 0.1 s and redraw only the position bar and clock. Seeks run one at a time and only the newest target is kept, so a long drag queues nothing. While dragging or seeking the player's reports are ignored, which keeps the thumb still. Dragging holds playback, uses approximate seeks and ends with an exact one, then resumes if it was playing. Seeks are clamped to the recording; non-numbers are refused.
+
+**End of playback.** `ended` shows a replay button, which plays from the start. Seeking back pauses there, and Play resumes.
+
+**Closing.** Closing the window or going back to the Library, which closes it, unloads the media, removes observers, cancels asynchronous work and closes file access. Opening it from the Window menu then shows that nothing is open. Renaming or removing the recording in the Library updates the open Viewer or ends its playback.
+
+**Errors.** Missing file, disconnected drive, denied access, unsupported format, damaged media and failures during loading or playback each show their own explanation in place of the media, with Locate File…, Try Again or Show in Finder as they apply. Locate File uses the same validation as the Library. A failed seek or Finder action shows an alert and leaves playback alone. Details go to OSLog under the `Playback` category.
+
+**Finder.** Show Recording in Finder, Open Recording Folder and Show Transcript in Finder go through `LibraryService`. The last is enabled only when a transcript file exists beside the media.
+
+**Transcript panel.** A real recording shows “No transcript available”, since nothing produces transcripts yet. No lines, waveforms or processing controls are simulated for one. Copy and Export stay disabled.
+
+**Full screen.** The whole window enters native full screen, including the transcript panel.
+
 ## Windows (layout only)
 
-Viewer and Settings are layout only and run on simulated state, as do the Library's design scenarios. Each feature has a `Preview` directory with fixed sample data and a scenario type that selects it.
+Settings is layout only and runs on simulated state, as do the design scenarios of the Viewer and the Library. Each feature has a `Preview` directory with fixed sample data and a scenario type that selects it.
 
 - **Recorder design scenarios.** `RecorderPreviewScenario` and `RecorderPreviewState` still show the Recorder's design states with sample data, for SwiftUI previews and review. They never touch capture and do not change saved preferences.
-- **Library scenarios.** With a `LibraryPreviewScenario`, `LibraryViewModel` filters, sorts, searches and removes sample recordings from `Features/Library/Preview` and touches nothing on disk. `SimulatedLibrarySearch` stands in for full-text and semantic search. Opening a sample recording goes to the simulated Viewer.
-- **Viewer.** `ViewerViewModel` with simulated playback and transcript, following the same pattern with its own `Preview` scenarios.
+- **Library scenarios.** With a `LibraryPreviewScenario`, `LibraryViewModel` filters, sorts, searches and removes sample recordings from `Features/Library/Preview` and touches nothing on disk. `SimulatedLibrarySearch` stands in for full-text and semantic search. Opening a sample recording goes to the Viewer's simulated state.
+- **Viewer scenarios.** With a `ViewerPreviewScenario`, `ViewerViewModel` runs a simulated clock over sample transcripts and draws sample frames and waveforms, and touches neither media nor the Library, following the same pattern.
 - **Settings.** `SettingsViewModel` with simulated downloads owned by a cancellable task that runs while the window is open, following the same pattern with its own `Preview` scenarios.
 
 Real downloads will need Application services that outlive windows; the current simulations do not. The Settings window's recordings location is still simulated and is not connected to the Recorder's folder.
@@ -85,8 +118,8 @@ Real downloads will need Application services that outlive windows; the current 
 
 App holds the AppKit integration:
 
-- `AppComposition` creates the recording and library services and the Recorder and Library view models.
-- `AppDelegate` holds those view models and builds the Dock menu and quit confirmation.
+- `AppComposition` creates the recording, library and playback services, the Recorder, Library and Viewer view models, and the Viewer's video surface.
+- `AppDelegate` holds those and builds the Dock menu and quit confirmation.
 - `RecordingIndicators` observes recording state to show the menu bar item and Dock badge.
 - `WindowNavigator` lets those AppKit menus open SwiftUI windows.
 - The Debug menu lives in `App/DebugCommands.swift`.
@@ -117,9 +150,12 @@ Swift Testing suites in `RecorderTests` cover:
 - The repository, migrations and date search against real temporary databases (`SQLiteRecordingRepositoryTests`).
 - File availability, moved files, Trash ownership rules, replacement validation and thumbnails against real temporary files, with Finder and the Trash replaced (`LocalRecordingFileStoreTests`).
 - Library use cases and finalization through the real coordinator with faked capture (`LibraryServiceTests`), and the live Library view model (`LibraryViewModelLiveTests`).
+- Playback domain rules: state transitions, seek validation, duration handling and formatting, failure translation (`PlaybackModelTests`).
+- The real player on media from the real writer, muted and without hardware: loading, both audio tracks, seeking, completion, replay, unloading, overtaken loads, unusable files, error translation; opening media through the real file store (`AVPlaybackServiceTests`).
+- The live Viewer view model on a real Library with the player replaced: loading, errors, recovery, switching and cleanup (`ViewerPlaybackTests`), transport, scrubbing and completion (`ViewerTransportTests`), following the Library, the transcript panel and Finder (`ViewerLibraryIntegrationTests`).
 - Presentation logic of the Recorder's design scenarios and the Library, Viewer and Settings view models against their simulated data (`RecorderViewModelTests`, `LibraryViewModelTests`, `ViewerViewModelTests`, `SettingsViewModelTests`).
 - Dock and menu bar menu construction (`RecordingMenusTests`).
 
 ## Not implemented yet
 
-No models, processing workers, transcripts, recovery of interrupted recordings, or real player exists yet. The Viewer and Settings windows are designed layouts driven by simulated data. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. The Settings window's storage figures are still samples. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.
+No models, processing workers, transcripts or recovery of interrupted recordings exist yet. The Settings window is a designed layout driven by simulated data, as are the Viewer's design scenarios. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. The Settings window's storage figures are still samples. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.

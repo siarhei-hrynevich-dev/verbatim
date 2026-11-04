@@ -1,5 +1,34 @@
 # Verification
 
+## Player
+
+Checked on 2026-11-04 on macOS 15 (Darwin 24.6.0) with Xcode 26.3 and Swift 6.2.4, in addition to `make check`. The real app, in an unsigned Debug build and so outside the sandbox, ran against a temporary home folder holding a test database and copies of real recordings. It was driven with Accessibility actions and posted mouse events, and observed through window captures and `lsof`.
+
+Confirmed in the running app, on real recordings made by the app:
+
+- Opening from the Library by keyboard; video with the correct aspect ratio and letterboxing, including after resizing.
+- Play, pause, position bar click, drag, ±15 s, speed against the timer visible in the frames, mute and volume control state, and replay after the end.
+- While dragging, the thumb and frame stay put against playback's own updates, and playback resumes on release.
+- A stored duration of 50 s against media of 46 s: the Viewer used the media's.
+- Audio-only: title, two tracks reported, play, pause, seek, Space.
+- Native full screen entered from the control and left again, returning to the previous size. This found that the window could not enter full screen as an auxiliary window.
+- Missing and damaged files show their explanations and actions; the Locate File sheet opens and cancels.
+- Show in Finder selects the file, and Open Folder opens its folder. The More menu lists its actions, with the transcript's disabled when no file exists.
+- `lsof` shows the media open only while its session lasts: switching to another recording held only the new file, failures and Back held none.
+- The nothing-open state, from the Window menu.
+
+Found by the integration tests and fixed: `publisher(for: \.status).values` drops a status change arriving between iterations, which could leave a load waiting forever.
+
+### Not verified
+
+- **Hearing it.** Nothing listened to the output. Both audio tracks are confirmed enabled with no selection group, on real files and in tests, which is what makes `AVPlayer` mix them. Volume and mute were confirmed as control state, and reach the player through calls covered by tests.
+- **The sandbox.** Bookmark-scoped playback outside the Movies folder, and a denied file, need a signed build. Both are covered only as far as `MediaFileAccess` and error translation go in tests.
+- **Very long recordings.** The longest file played was 47 s. Scrubbing logic for long files is tested with a controllable player, not with a real hour-long file.
+- **A located file end to end through the panel.** The sheet was opened and cancelled; choosing a file is covered by view model tests against real files.
+- **Show Transcript in Finder in the running app**, since no recording has a transcript file. It is covered by tests against real files.
+- **A system-cancelled drag**, which is handled but was not provoked.
+- **An unexplained close.** The Viewer window closed once between test steps, with the process healthy. It did not recur during the rest of the session, and no code closes it except Back, so it may have been closed from outside. The cause was not established.
+
 ## Recording library
 
 Verified on November 4, 2026, on an Apple Silicon Mac running macOS 15.7.7 with Xcode 26.3.

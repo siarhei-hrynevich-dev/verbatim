@@ -21,8 +21,12 @@ protocol RecordingFileStore: Sendable {
     func inspect(_ recording: LibraryRecording) async -> RecordingFileInspection
     /// Verifies that a user-chosen file can stand in for a recording whose media went missing.
     func validateReplacement(at url: URL, for recording: LibraryRecording) async throws -> MediaSnapshot
-    func open(_ recording: LibraryRecording) async throws
+    /// Keeps the media reachable until the returned file is closed, for reading that outlasts one call, as playback
+    /// does.
+    func openMedia(of recording: LibraryRecording) async throws -> OpenMediaFile
     func reveal(_ recording: LibraryRecording) async throws
+    /// Reveals a file in the folder of the recording's media.
+    func revealFile(named fileName: String, besideMediaOf recording: LibraryRecording) async throws
     func openFolder(of recording: LibraryRecording) async throws
     /// Opens a folder that may not exist yet, creating it first.
     func openFolder(at url: URL) async throws

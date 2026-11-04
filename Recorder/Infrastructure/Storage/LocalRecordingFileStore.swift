@@ -80,19 +80,32 @@ actor LocalRecordingFileStore: RecordingFileStore {
         )
     }
 
-    // MARK: - Finder
-
-    func open(_ recording: LibraryRecording) async throws {
-        try await withMedia(of: recording) { url in
-            guard await systemActions.openFile(url) else {
-                throw LibraryError.openFailed
-            }
+    func openMedia(of recording: LibraryRecording) throws -> OpenMediaFile {
+        let access = MediaFileAccess.open(recording.media)
+        do {
+            try require(access)
+        } catch {
+            access.close()
+            throw error
         }
+        return OpenMediaFile(url: access.media.url) { access.close() }
     }
+
+    // MARK: - Finder
 
     func reveal(_ recording: LibraryRecording) async throws {
         try await withMedia(of: recording) { url in
             await systemActions.revealInFinder(url)
+        }
+    }
+
+    func revealFile(named fileName: String, besideMediaOf recording: LibraryRecording) async throws {
+        try await withMedia(of: recording) { url in
+            let file = url.deletingLastPathComponent().appending(path: fileName, directoryHint: .notDirectory)
+            guard FileManager.default.fileExists(atPath: file.path(percentEncoded: false)) else {
+                throw LibraryError.mediaUnavailable(.missing)
+            }
+            await systemActions.revealInFinder(file)
         }
     }
 

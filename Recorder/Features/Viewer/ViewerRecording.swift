@@ -10,6 +10,8 @@ struct ViewerRecording: Equatable, Sendable {
         case failed(stoppedAt: TimeInterval)
         /// Recorded with automatic transcription off.
         case notProcessed
+        /// No transcript exists and nothing can make one yet: the state of every real recording so far.
+        case unavailable
     }
 
     let item: LibraryItem

@@ -9,36 +9,80 @@ struct ViewerWindowView: View {
     /// Overrides the system accent color; `nil` follows the system.
     var accent: VerbatimAccent?
     var actions = ViewerWindowActions()
+    /// Renders a real recording's video, supplied by App so this feature needs no knowledge of the player behind it.
+    var videoSurface: AnyView?
 
+    @Environment(\.dismissWindow) private var dismissWindow
     @State private var transcriptWidth = ViewerLayout.defaultTranscriptWidth
 
     var body: some View {
         HStack(spacing: 0) {
-            ViewerPlayerView(viewModel: viewModel, openFolder: actions.openFolder)
+            ViewerPlayerView(viewModel: viewModel, videoSurface: videoSurface, backToLibrary: backToLibrary)
                 .frame(minWidth: ViewerLayout.minimumPlayerWidth)
-            TranscriptResizeHandle(width: $transcriptWidth)
-            ViewerTranscriptPanel(viewModel: viewModel, actions: actions)
-                .frame(width: transcriptWidth)
+            if viewModel.recording != nil {
+                TranscriptResizeHandle(width: $transcriptWidth)
+                ViewerTranscriptPanel(viewModel: viewModel, actions: panelActions)
+                    .frame(width: transcriptWidth)
+            }
         }
         .foregroundStyle(VerbatimColor.primaryText)
         .background(VerbatimColor.windowBackground)
         .focusEffectDisabled()
-        .navigationTitle(viewModel.title)
+        .navigationTitle(viewModel.title.isEmpty ? String(localized: "Viewer") : viewModel.title)
         .toolbar { toolbarContent }
-        .task(id: viewModel.isPlaying) { await runPlaybackClock() }
+        .task(id: viewModel.isPlaying) { await runSimulatedClock() }
+        // Follows renames and removals made in the Library while this recording is open.
+        .task(id: viewModel.libraryRevision) { await viewModel.refreshMetadata() }
+        .fileImporter(isPresented: $viewModel.isLocatingFile, allowedContentTypes: [.movie, .audio]) { result in
+            viewModel.finishLocating(result)
+        }
+        .alert(
+            viewModel.actionIssue?.title ?? "",
+            isPresented: actionIssueBinding,
+            presenting: viewModel.actionIssue
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { issue in
+            Text(issue.message)
+        }
+        // Nothing may keep playing, or keep the file open, in a window that is gone.
+        .onDisappear(perform: viewModel.windowClosed)
         .verbatimAccent(accent)
     }
 
-    /// Advances simulated playback while playing; the task is cancelled when playback stops or the window closes.
-    private func runPlaybackClock() async {
-        while viewModel.isPlaying, !Task.isCancelled {
+    /// Advances a design scenario's playback; the task is cancelled when playback stops or the window closes.
+    private func runSimulatedClock() async {
+        while viewModel.isPreviewing, viewModel.isPlaying, !Task.isCancelled {
             do {
                 try await Task.sleep(for: .seconds(ViewerLayout.clockTick))
             } catch {
                 return
             }
-            viewModel.advance(by: ViewerLayout.clockTick)
+            viewModel.advanceSimulation(by: ViewerLayout.clockTick)
         }
+    }
+
+    /// This window is one step on from the Library, so going back closes it, which also ends playback.
+    private func backToLibrary() {
+        actions.backToLibrary()
+        dismissWindow(id: Self.windowID)
+    }
+
+    private var panelActions: ViewerWindowActions {
+        var panelActions = actions
+        panelActions.backToLibrary = backToLibrary
+        return panelActions
+    }
+
+    private var actionIssueBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.actionIssue != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.dismissActionIssue()
+                }
+            }
+        )
     }
 
     // MARK: - Toolbar
@@ -47,7 +91,7 @@ struct ViewerWindowView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
             HStack(spacing: 6) {
-                Button(action: actions.backToLibrary) {
+                Button(action: backToLibrary) {
                     IconView(.chevronLeft, size: 16)
                         .frame(width: 30)
                 }
@@ -57,7 +101,8 @@ struct ViewerWindowView: View {
                 .keyboardShortcut("[", modifiers: .command)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    RecordingTitleField(title: $viewModel.title)
+                    RecordingTitleField(title: $viewModel.title, commit: viewModel.commitTitle)
+                        .disabled(viewModel.recording == nil)
                     Text(metadata)
                         .font(.system(size: 11))
                         .foregroundStyle(VerbatimColor.secondaryText)
@@ -69,21 +114,14 @@ struct ViewerWindowView: View {
 
         ToolbarItemGroup(placement: .primaryAction) {
             fileActions
-            Button {
-            } label: {
-                IconView(.more, size: 16)
-                    .frame(width: 30)
-            }
-            .buttonStyle(.toolbarIcon)
-            .help("More actions")
-            .accessibilityLabel("More actions")
+            moreActions
         }
     }
 
     /// Show in Finder and the Export menu, joined in one bordered control.
     private var fileActions: some View {
         HStack(spacing: 0) {
-            Button(action: actions.showInFinder) {
+            Button(action: viewModel.showInFinder) {
                 HStack(spacing: 6) {
                     IconView(.folder, size: 14)
                     Text("Show in Finder")
@@ -96,8 +134,14 @@ struct ViewerWindowView: View {
 
             VerbatimColor.separator.frame(width: 0.5, height: 26)
 
-            ViewerExportMenu(hasTranscript: viewModel.recording.hasTranscript, actions: actions)
+            ViewerExportMenu(
+                hasTranscript: viewModel.recording?.hasTranscript ?? false,
+                canShowTranscriptInFinder: viewModel.canShowTranscriptInFinder,
+                showTranscriptInFinder: viewModel.showTranscriptInFinder,
+                actions: actions
+            )
         }
+        .disabled(viewModel.recording == nil)
         .font(.system(size: 12))
         .foregroundStyle(VerbatimColor.primaryText)
         .background(VerbatimColor.controlBackground, in: RoundedRectangle(cornerRadius: 7))
@@ -105,29 +149,46 @@ struct ViewerWindowView: View {
         .shadow(color: .black.opacity(0.05), radius: 0.5, y: 1)
     }
 
-    /// `Today, 10:30 · 1:12:40 · 3.1 GB · Screen`.
+    private var moreActions: some View {
+        Menu {
+            Button("Show Recording in Finder", action: viewModel.showInFinder)
+            Button("Open Recording Folder", action: viewModel.openFolder)
+            Button("Show Transcript in Finder", action: viewModel.showTranscriptInFinder)
+                .disabled(!viewModel.canShowTranscriptInFinder)
+        } label: {
+            IconView(.more, size: 16)
+                .frame(width: 30)
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.toolbarIcon)
+        .fixedSize()
+        .disabled(viewModel.recording == nil)
+        .help("More actions")
+        .accessibilityLabel("More actions")
+    }
+
+    /// `Today, 10:30 · 1:12:40 · 3.1 GB · Screen`, with the media's own duration once it is known.
     private var metadata: String {
-        let item = viewModel.recording.item
-        let kind = item.kind == .audio ? String(localized: "Audio") : String(localized: "Screen")
+        guard let item = viewModel.recording?.item else {
+            return ""
+        }
         return [
             LibraryFormat.recordedDate(item.recordedAt),
-            LibraryFormat.duration(item.duration),
+            LibraryFormat.duration(viewModel.duration),
             LibraryFormat.size(item.sizeBytes),
-            kind
+            item.kindLabel
         ]
         .joined(separator: " · ")
     }
 }
 
-/// Navigation and file operations the Viewer hands to the app. Finder integration, export, processing control
-/// and the logs are not implemented yet, so every action defaults to doing nothing.
+/// Navigation and transcript operations the Viewer hands to the app. Export, processing control and the logs are not
+/// implemented yet, and only design scenarios can reach them, so those actions default to doing nothing.
 struct ViewerWindowActions {
     var backToLibrary: () -> Void = {}
-    var showInFinder: () -> Void = {}
-    var openFolder: () -> Void = {}
     var copyTranscript: () -> Void = {}
     var exportTranscript: (ViewerExportFormat) -> Void = { _ in }
-    var showTranscriptInFinder: () -> Void = {}
     var pauseProcessing: () -> Void = {}
     var showLog: () -> Void = {}
     var chooseLanguage: () -> Void = {}
@@ -154,6 +215,7 @@ enum ViewerLayout {
 /// The editable title: plain text that shows a fill on hover and a field with an accent ring while editing.
 private struct RecordingTitleField: View {
     @Binding var title: String
+    let commit: () -> Void
 
     @FocusState private var isEditing: Bool
     @State private var isHovered = false
@@ -171,6 +233,11 @@ private struct RecordingTitleField: View {
             .focused($isEditing)
             .onHover { isHovered = $0 }
             .onSubmit { isEditing = false }
+            .onChange(of: isEditing) { _, isNowEditing in
+                if !isNowEditing {
+                    commit()
+                }
+            }
             .accessibilityLabel("Recording title")
     }
 

@@ -5,7 +5,9 @@ import SwiftUI
 /// The player is a keyboard focus stop: Space plays or pauses, and Left and Right skip 15 seconds.
 struct ViewerPlayerView: View {
     let viewModel: ViewerViewModel
-    let openFolder: () -> Void
+    /// Renders a real recording's video. Design scenarios draw a sample frame instead.
+    let videoSurface: AnyView?
+    let backToLibrary: () -> Void
 
     @FocusState private var isFocused: Bool
 
@@ -13,16 +15,20 @@ struct ViewerPlayerView: View {
         VStack(spacing: 0) {
             ZStack(alignment: .bottom) {
                 media
-                ViewerControlHUD(viewModel: viewModel)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 18)
+                if showsControls {
+                    ViewerControlHUD(viewModel: viewModel)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 18)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background { keyboardTarget }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Player")
 
-            ViewerFolderStrip(recording: viewModel.recording, openFolder: openFolder)
+            if let recording = viewModel.recording {
+                ViewerFolderStrip(recording: recording, openFolder: viewModel.openFolder)
+            }
         }
     }
 
@@ -39,9 +45,50 @@ struct ViewerPlayerView: View {
             .accessibilityHidden(true)
     }
 
+    private var showsControls: Bool {
+        switch viewModel.playbackState {
+        case .ready, .playing, .paused, .ended, .loading: true
+        case .idle, .failed: false
+        }
+    }
+
     @ViewBuilder
     private var media: some View {
-        switch viewModel.recording.item.kind {
+        if viewModel.isPreviewing, let recording = viewModel.recording {
+            previewMedia(recording)
+        } else {
+            liveMedia
+        }
+    }
+
+    @ViewBuilder
+    private var liveMedia: some View {
+        switch viewModel.playbackState {
+        case .idle:
+            ViewerNothingOpenView(backToLibrary: backToLibrary)
+        case .failed:
+            if let issue = viewModel.playbackIssue {
+                ViewerPlaybackErrorView(issue: issue, perform: viewModel.perform, backToLibrary: backToLibrary)
+            }
+        case .loading:
+            ZStack {
+                Color.black
+                ProgressView()
+                    .controlSize(.small)
+                    .environment(\.colorScheme, .dark)
+            }
+        case .ready, .playing, .paused, .ended:
+            if viewModel.showsVideo, let videoSurface {
+                ViewerLiveVideo(viewModel: viewModel, surface: videoSurface) { isFocused = true }
+            } else if let recording = viewModel.recording {
+                ViewerLiveAudio(viewModel: viewModel, recording: recording)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func previewMedia(_ recording: ViewerRecording) -> some View {
+        switch recording.item.kind {
         case .screen, .window:
             VideoFrame(isPaused: !viewModel.isPlaying)
                 .contentShape(Rectangle())
@@ -51,7 +98,7 @@ struct ViewerPlayerView: View {
                 }
                 .accessibilityHidden(true)
         case .audio:
-            ViewerWaveformView(viewModel: viewModel)
+            ViewerWaveformView(viewModel: viewModel, recording: recording)
         }
     }
 
@@ -63,7 +110,7 @@ struct ViewerPlayerView: View {
     static let skipSeconds: TimeInterval = 15
 }
 
-/// A stylized frame of a screen recording on black, with a play button over it while paused.
+/// The design scenarios' stylized frame of a screen recording on black, with a play button over it while paused.
 private struct VideoFrame: View {
     let isPaused: Bool
 
@@ -87,7 +134,7 @@ private struct VideoFrame: View {
                         .frame(width: size.width * 0.18, height: size.width * 0.18 / 1.6)
                         .offset(x: size.width * 0.79, y: size.height * 0.96 - size.width * 0.18 / 1.6)
                     if isPaused {
-                        playOverlay.position(x: size.width / 2, y: size.height * 0.42)
+                        ViewerPlayOverlay(systemImage: "play.fill").position(x: size.width / 2, y: size.height * 0.42)
                     }
                 }
             }
@@ -104,16 +151,6 @@ private struct VideoFrame: View {
             .offset(x: size.width * fraction.minX, y: size.height * fraction.minY)
     }
 
-    private var playOverlay: some View {
-        Image(systemName: "play.fill")
-            .font(.system(size: 26))
-            .foregroundStyle(.white)
-            .frame(width: 64, height: 64)
-            .background(.ultraThinMaterial, in: Circle())
-            .background(Color(white: 40 / 255).opacity(0.7), in: Circle())
-            .environment(\.colorScheme, .dark)
-    }
-
     // The frame shows a dark app window in both appearances.
     private static let surface = Color(red: 28 / 255, green: 28 / 255, blue: 30 / 255)
     private static let chrome = Color(red: 44 / 255, green: 44 / 255, blue: 46 / 255)
@@ -121,7 +158,8 @@ private struct VideoFrame: View {
     private static let line = Color(red: 58 / 255, green: 58 / 255, blue: 60 / 255)
 }
 
-/// The recording's folder and files. Transcript files are dimmed until they exist.
+/// The recording's folder and files. In a design scenario, transcript files are dimmed until they exist; a real
+/// recording lists only files that do.
 private struct ViewerFolderStrip: View {
     let recording: ViewerRecording
     let openFolder: () -> Void
@@ -136,7 +174,7 @@ private struct ViewerFolderStrip: View {
                 .frame(minWidth: 60, alignment: .leading)
             HStack(spacing: 4) {
                 ForEach(Array(chips.enumerated()), id: \.offset) { index, name in
-                    fileChip(name, isAvailable: index == 0 || recording.hasTranscript)
+                    fileChip(name, isAvailable: index == 0 || recording.item.location != nil || recording.hasTranscript)
                 }
             }
             .fixedSize()
@@ -161,9 +199,11 @@ private struct ViewerFolderStrip: View {
     private var chips: [String] {
         let item = recording.item
         let media = "\(item.fileNames.first ?? "")  \(LibraryFormat.size(item.sizeBytes))"
-        let transcripts = LibraryFormat.fileSummary(Array(item.fileNames.dropFirst()))
-            .components(separatedBy: " · ")
-        return [media] + transcripts
+        let others = Array(item.fileNames.dropFirst())
+        guard !others.isEmpty else {
+            return [media]
+        }
+        return [media] + LibraryFormat.fileSummary(others).components(separatedBy: " · ")
     }
 
     private func fileChip(_ name: String, isAvailable: Bool) -> some View {

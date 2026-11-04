@@ -12,7 +12,7 @@ struct ViewerTranscriptPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            if viewModel.recording.hasTranscript {
+            if hasTranscript {
                 lineList
                 footer
             } else {
@@ -24,14 +24,18 @@ struct ViewerTranscriptPanel: View {
         .accessibilityLabel("Transcript")
     }
 
+    private var hasTranscript: Bool {
+        viewModel.recording?.hasTranscript ?? false
+    }
+
     private var header: some View {
         VStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("Transcript")
                     .font(.system(size: 13, weight: .bold))
                     .accessibilityAddTraits(.isHeader)
-                if viewModel.recording.hasTranscript {
-                    Text("\(viewModel.lines.count) lines · \(viewModel.recording.language)")
+                if hasTranscript {
+                    Text("\(viewModel.lines.count) lines · \(viewModel.recording?.language ?? "")")
                         .font(.system(size: 11))
                         .foregroundStyle(VerbatimColor.secondaryText)
                 }
@@ -41,11 +45,11 @@ struct ViewerTranscriptPanel: View {
                         .frame(width: 24, height: 22)
                 }
                 .buttonStyle(PanelIconButtonStyle())
-                .disabled(!viewModel.recording.hasTranscript)
+                .disabled(!hasTranscript)
                 .help("Copy Entire Transcript")
                 .accessibilityLabel("Copy Entire Transcript")
             }
-            if viewModel.recording.hasTranscript {
+            if hasTranscript {
                 TranscriptSearchBar(viewModel: viewModel)
             }
         }

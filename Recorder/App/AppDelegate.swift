@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// AppKit integration that SwiftUI scenes do not provide: the Dock menu, recording indicators in the menu bar and
 /// Dock, and confirmation before quitting during a recording.
@@ -10,7 +11,8 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModels = AppComposition.makeViewModels(
         recorderScenario: .fromLaunchArguments(),
-        libraryScenario: .fromLaunchArguments()
+        libraryScenario: .fromLaunchArguments(),
+        viewerScenario: .fromLaunchArguments()
     )
     let navigator = WindowNavigator()
 
@@ -20,6 +22,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     var libraryViewModel: LibraryViewModel {
         viewModels.library
+    }
+
+    var viewerViewModel: ViewerViewModel {
+        viewModels.viewer
+    }
+
+    var viewerVideoSurface: AnyView {
+        viewModels.viewerVideoSurface
     }
 
     override init() {
