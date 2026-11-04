@@ -61,9 +61,14 @@ protocol RecordingDestinationStore: Sendable {
     func useDefaultFolder() async
 }
 
-/// Stores recording metadata. A later SQLite implementation replaces the sidecar behind this contract.
-protocol RecordingRepository: Sendable {
+/// Writes the sidecar kept beside a recording's media: a snapshot from when it finished, or a note that it did not.
+protocol RecordingMetadataStore: Sendable {
     func save(_ metadata: RecordingMetadata, in destination: RecordingDestination) async throws
+}
+
+/// Takes in recordings whose media is finalized and validated. Never called for unfinished media.
+protocol FinishedRecordingRegistry: Sendable {
+    func addFinishedRecording(_ metadata: RecordingMetadata, destination: RecordingDestination) async throws
 }
 
 protocol RecordingPreferencesStore: Sendable {
@@ -82,4 +87,8 @@ enum SystemSettingsPane: Equatable, Sendable {
 protocol SystemActions: Sendable {
     func open(_ pane: SystemSettingsPane) async
     func openInFinder(_ url: URL) async
+    /// Shows the item selected in its Finder window.
+    func revealInFinder(_ url: URL) async
+    /// Opens a file or folder in its default application. Returns whether the system accepted the request.
+    func openFile(_ url: URL) async -> Bool
 }

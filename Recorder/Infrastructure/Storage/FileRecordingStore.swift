@@ -3,10 +3,10 @@ import OSLog
 
 /// The recordings folder on disk, and recording metadata stored as a JSON file beside each recording's media.
 ///
-/// The sidecar stands in until the planned SQLite persistence exists; it keeps metadata out of UserDefaults and
-/// with the media it describes. Folders the user picked are reached through a security-scoped bookmark, whose
-/// access stays open while that folder is in use.
-actor FileRecordingStore: RecordingDestinationStore, RecordingRepository {
+/// The sidecar is a snapshot of a recording when it finished, kept with the media it describes; the Library's database
+/// is the source of truth for titles and everything else that can change later. Folders the user picked are reached
+/// through a security-scoped bookmark, whose access stays open while that folder is in use.
+actor FileRecordingStore: RecordingDestinationStore, RecordingMetadataStore {
     /// UserDefaults is documented as thread-safe, but is not marked Sendable.
     nonisolated(unsafe) private let defaults: UserDefaults
     private let defaultFolder: URL
@@ -88,7 +88,7 @@ actor FileRecordingStore: RecordingDestinationStore, RecordingRepository {
         endFolderAccess()
     }
 
-    // MARK: - RecordingRepository
+    // MARK: - RecordingMetadataStore
 
     func save(_ metadata: RecordingMetadata, in destination: RecordingDestination) throws {
         let encoder = JSONEncoder()

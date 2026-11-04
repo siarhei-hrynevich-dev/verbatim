@@ -1,5 +1,43 @@
 # Verification
 
+## Recording library
+
+Verified on November 4, 2026, on an Apple Silicon Mac running macOS 15.7.7 with Xcode 26.3.
+
+`make check` passed: format-check, strict SwiftLint (0 violations across 141 files), native Xcode build, and 228 Swift Testing tests in 33 suites.
+
+### Real capture, Finder and Trash
+
+A scratch harness outside the repository compiled the production `Recorder/Models`, `Recorder/Application` and `Recorder/Infrastructure` sources, with its home folder redirected so that its database stayed out of the real one. Test files were deleted afterwards.
+
+| Case | Result |
+| --- | --- |
+| Three short display recordings through the real coordinator | Each appeared in the Library with no metadata error: type, duration, size, `recorded` status, bookmark |
+| Rename | Title changed; media file untouched |
+| Thumbnail | JPEG generated from the real recording |
+| Show in Finder, Open Folder, Open Recording, Open Recordings Folder | Returned without error, through real `NSWorkspace`; the windows themselves were not inspected |
+| Remove from Library | Entry gone; file still on disk |
+| Delete Recording | Whole folder found in the real `~/.Trash`; entry gone |
+| New service and repository on the same database | History intact |
+| Media renamed on disk | Followed through its bookmark; stored path updated |
+| Media deleted on disk | Reported missing; entry kept |
+
+### App Sandbox
+
+A second harness, ad-hoc signed with `Recorder.entitlements` in a minimal app bundle, ran under the real sandbox without capture. The database was created in the app's container. In `~/Movies/Verbatim` it created a stand-in recording, made a security-scoped bookmark, inspected the folder, revealed the file and moved the folder to the real Trash, removing the entry.
+
+### The built app
+
+A scratch copy of the Debug build ran on the harness's database. The Library window showed the real entries, a real video thumbnail, type labels, section counts, and a missing recording with Locate…, in the existing design. Nothing was reported in its log.
+
+### Not verified
+
+- **Library interactions through the UI.** The rename and delete sheets, the actions menu, the sort menu, typing in search, the Locate panel and Undo were not clicked through. Their view model and service paths are covered by tests.
+- **A recording started from the app's own window**, for the reason given below under Recorder functionality.
+- **Custom recordings folders under the sandbox**, including reaching a recording through its bookmark after switching folders, and Locate with a real open panel's security scope.
+- **Unmounted volumes on real hardware**; the path check is covered by a test with a nonexistent volume.
+- **Performance with a very large history**; queries are indexed, but no large data set was measured.
+
 ## Recorder functionality
 
 Verified on November 4, 2026, on an Apple Silicon Mac running macOS 15.7.7 with Xcode 26.3, one internal Retina display and one external display.

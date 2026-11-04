@@ -14,7 +14,8 @@ struct RecordingCoordinatorTests {
             engine: services,
             permissions: permissions,
             destinations: services,
-            repository: services
+            metadataStore: services,
+            library: services
         )
         return (coordinator, services)
     }
@@ -157,10 +158,9 @@ struct RecordingCoordinatorTests {
     // MARK: - Transcription preference
 
     @Test(arguments: [
-        (true, Recording.ProcessingStatus.pending),
-        (false, Recording.ProcessingStatus.ready)
+        true, false
     ])
-    func storesTheTranscriptionRequest(isRequested: Bool, expectedStatus: Recording.ProcessingStatus) async throws {
+    func storesTheTranscriptionRequestWithANeutralStatus(isRequested: Bool) async throws {
         let (coordinator, services) = makeCoordinator()
         coordinator.requestStart(TestFixtures.configuration(transcribes: isRequested))
         await coordinator.waitUntilSettled()
@@ -170,6 +170,6 @@ struct RecordingCoordinatorTests {
 
         let saved = try #require(await services.savedMetadata.first)
         #expect(saved.transcriptionRequested == isRequested)
-        #expect(saved.recording.processingStatus == expectedStatus)
+        #expect(saved.recording.processingStatus == .recorded)
     }
 }

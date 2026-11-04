@@ -6,6 +6,10 @@ enum RecordingFileLayout {
     /// QuickTime for audio-only recordings too: MPEG-4 audio files lose the track names that keep the microphone
     /// and system audio identifiable.
     static let mediaFileName = "recording.mov"
+    /// Files the app writes or will write into a recording's folder besides the media.
+    static let derivedFileNames: Set<String> = [
+        metadataFileName, "transcript.json", "transcript.srt", "transcript.txt"
+    ]
 
     static func directoryName(createdAt: Date, id: UUID, timeZone: TimeZone = .current) -> String {
         let formatter = DateFormatter()
@@ -13,6 +17,12 @@ enum RecordingFileLayout {
         formatter.timeZone = timeZone
         formatter.dateFormat = "yyyy-MM-dd_HHmmss"
         return "\(formatter.string(from: createdAt))_\(id.uuidString.lowercased())"
+    }
+
+    /// Whether a folder is the one the app created for this recording. A folder the user made, or renamed, is theirs:
+    /// only files inside it that are known to belong to the recording may be touched.
+    static func isOwnedDirectory(named name: String, recordingID: UUID) -> Bool {
+        name.hasSuffix("_\(recordingID.uuidString.lowercased())")
     }
 }
 

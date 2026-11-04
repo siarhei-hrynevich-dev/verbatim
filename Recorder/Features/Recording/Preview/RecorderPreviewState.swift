@@ -19,7 +19,8 @@ extension RecorderViewModel {
             engine: services,
             permissions: services,
             destinations: services,
-            repository: services
+            metadataStore: services,
+            library: services
         )
         self.init(
             dependencies: Dependencies(
@@ -101,7 +102,7 @@ extension PreviewRecorderServices: CaptureEngine, CaptureSourceProviding, Captur
     func requestMicrophoneAccess() async -> Bool { true }
 }
 
-extension PreviewRecorderServices: RecordingDestinationStore, RecordingRepository {
+extension PreviewRecorderServices: RecordingDestinationStore, RecordingMetadataStore, FinishedRecordingRegistry {
     func currentLocation() async -> RecordingLocation {
         RecordingLocation(
             url: URL(fileURLWithPath: "/"),
@@ -119,6 +120,7 @@ extension PreviewRecorderServices: RecordingDestinationStore, RecordingRepositor
     func useFolder(_ url: URL) async throws {}
     func useDefaultFolder() async {}
     func save(_ metadata: RecordingMetadata, in destination: RecordingDestination) async throws {}
+    func addFinishedRecording(_ metadata: RecordingMetadata, destination: RecordingDestination) async throws {}
 }
 
 extension PreviewRecorderServices: RecordingPreferencesStore, SystemActions {
@@ -126,4 +128,6 @@ extension PreviewRecorderServices: RecordingPreferencesStore, SystemActions {
     func save(_ preferences: RecordingPreferences) {}
     func open(_ pane: SystemSettingsPane) async {}
     func openInFinder(_ url: URL) async {}
+    func revealInFinder(_ url: URL) async {}
+    func openFile(_ url: URL) async -> Bool { true }
 }

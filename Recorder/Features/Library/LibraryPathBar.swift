@@ -14,7 +14,7 @@ struct LibraryPathBar: View {
         HStack(spacing: 6) {
             IconView(.folder, size: 13)
                 .foregroundStyle(VerbatimColor.accent)
-            Text(verbatim: "\(storage.folderName) ›")
+            Text(verbatim: "\(item.location?.parentFolderName ?? storage.folderName) ›")
                 .foregroundStyle(VerbatimColor.secondaryText)
                 .fixedSize()
             Text(item.folderName)
@@ -51,10 +51,20 @@ struct LibraryPathBar: View {
     }
 
     private var isMissing: Bool {
-        item.status == .missing
+        item.isMissing
     }
 
     private var detail: String {
+        switch item.location?.unavailability {
+        case .volumeUnavailable:
+            return String(localized: "— the drive holding this recording isn’t connected.")
+        case .accessDenied:
+            return String(localized: "— Verbatim doesn’t have access to this file. Locate it to grant access.")
+        case .missing:
+            return String(localized: "— file not found. It may have been moved or deleted in Finder.")
+        case .available, nil:
+            break
+        }
         if isMissing {
             return String(localized: "— folder not found. It may have been moved or deleted in Finder.")
         }

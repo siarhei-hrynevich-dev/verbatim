@@ -32,7 +32,8 @@ struct RecorderViewModelLiveTests {
             engine: services,
             permissions: permissions,
             destinations: services,
-            repository: services
+            metadataStore: services,
+            library: services
         )
         let store = InMemoryPreferencesStore(preferences)
         let viewModel = RecorderViewModel(
@@ -286,7 +287,8 @@ struct RecorderSourceLossTests {
                     engine: services,
                     permissions: FakePermissions(),
                     destinations: services,
-                    repository: services
+                    metadataStore: services,
+                    library: services
                 ),
                 sourceProvider: provider,
                 levelPreviewEngine: services,

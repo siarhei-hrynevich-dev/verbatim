@@ -41,14 +41,16 @@ actor FakeCaptureSession: CaptureSession {
 }
 
 /// A controllable stand-in for capture, permissions, the recordings folder and metadata storage.
-actor FakeRecordingServices: CaptureEngine, RecordingDestinationStore, RecordingRepository {
+actor FakeRecordingServices: CaptureEngine, RecordingDestinationStore, RecordingMetadataStore {
     var startResult: Result<FakeCaptureSession, any Error>
     var saveError: (any Error)?
+    var libraryError: (any Error)?
     var availableBytes: Int64 = 100_000_000_000
     var prepareError: (any Error)?
     var isFolderEmpty = true
     private(set) var startCount = 0
     private(set) var savedMetadata: [RecordingMetadata] = []
+    private(set) var libraryEntries: [RecordingMetadata] = []
     private(set) var discardedDestinations: [RecordingDestination] = []
     private(set) var startedConfigurations: [RecordingConfiguration] = []
 
@@ -59,6 +61,7 @@ actor FakeRecordingServices: CaptureEngine, RecordingDestinationStore, Recording
     func configure(
         startResult: Result<FakeCaptureSession, any Error>? = nil,
         saveError: (any Error)? = nil,
+        libraryError: (any Error)? = nil,
         availableBytes: Int64? = nil,
         prepareError: (any Error)? = nil,
         isFolderEmpty: Bool? = nil
@@ -67,6 +70,7 @@ actor FakeRecordingServices: CaptureEngine, RecordingDestinationStore, Recording
             self.startResult = startResult
         }
         self.saveError = saveError
+        self.libraryError = libraryError
         self.prepareError = prepareError
         self.availableBytes = availableBytes ?? self.availableBytes
         self.isFolderEmpty = isFolderEmpty ?? self.isFolderEmpty
@@ -113,6 +117,16 @@ actor FakeRecordingServices: CaptureEngine, RecordingDestinationStore, Recording
         }
         savedMetadata.append(metadata)
     }
+
+}
+
+extension FakeRecordingServices: FinishedRecordingRegistry {
+    func addFinishedRecording(_ metadata: RecordingMetadata, destination: RecordingDestination) throws {
+        if let libraryError {
+            throw libraryError
+        }
+        libraryEntries.append(metadata)
+    }
 }
 
 /// Permissions fixed for one test. Requests answer with what the access would become.
@@ -151,6 +165,8 @@ final class InMemoryPreferencesStore: RecordingPreferencesStore, @unchecked Send
 struct NoSystemActions: SystemActions {
     func open(_ pane: SystemSettingsPane) async {}
     func openInFinder(_ url: URL) async {}
+    func revealInFinder(_ url: URL) async {}
+    func openFile(_ url: URL) async -> Bool { true }
 }
 
 enum TestError: Error {

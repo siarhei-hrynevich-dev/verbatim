@@ -4,6 +4,7 @@ import Foundation
 struct LibraryItem: Identifiable, Equatable, Sendable {
     enum Kind: Sendable {
         case screen
+        case window
         case audio
     }
 
@@ -21,7 +22,7 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
     }
 
     let id: UUID
-    let title: String
+    var title: String
     let recordedAt: Date
     let duration: TimeInterval
     let sizeBytes: Int64
@@ -29,10 +30,33 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
     var status: Status
     /// The recording's folder inside the recordings folder, such as `2026-11-03 Architecture Review`.
     let folderName: String
+    /// Where the recording really is, for one the Library tracks on disk. Sample recordings have no location.
+    var location: Location?
+    /// Whether transcription exists to start. Processing is not implemented for real recordings.
+    var isProcessingAvailable = true
 
-    /// Every recording folder holds the media file and three transcript formats.
+    /// A tracked recording's folder and files as last inspected.
+    struct Location: Equatable, Sendable {
+        /// The folder's full path, when it is not directly inside the recordings folder.
+        var folderPath: String?
+        /// The name of the folder holding the recording's folder.
+        var parentFolderName: String?
+        var fileNames: [String]
+        /// Whether Delete moves the whole folder to the Trash, rather than individual files.
+        var trashesFolder: Bool
+        /// Why the media cannot be reached, if it cannot.
+        var unavailability: MediaAvailability?
+    }
+
+    /// The recording's files; the design's recording folders hold the media file and three transcript formats.
     var fileNames: [String] {
-        [kind == .audio ? "recording.m4a" : "recording.mov", "transcript.txt", "transcript.srt", "transcript.json"]
+        location?.fileNames ?? [
+            kind == .audio ? "recording.m4a" : "recording.mov", "transcript.txt", "transcript.srt", "transcript.json"
+        ]
+    }
+
+    var isMissing: Bool {
+        status == .missing
     }
 
     var hasTranscript: Bool {
@@ -52,6 +76,70 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
 
     /// Whether transcription can be started: the recording has no transcript yet, or processing failed.
     var canStartProcessing: Bool {
-        status == .recorded || status == .failed
+        isProcessingAvailable && (status == .recorded || status == .failed)
+    }
+
+    /// The fix offered inline next to the status, if any.
+    var statusActionTitle: String? {
+        isMissing || canStartProcessing ? status.actionTitle : nil
+    }
+
+    var kindLabel: String {
+        switch kind {
+        case .screen: String(localized: "Screen")
+        case .window: String(localized: "Window")
+        case .audio: String(localized: "Audio only")
+        }
+    }
+}
+
+extension LibraryItem {
+    /// `inspection` is `nil` until the file system has been checked; the recording shows as present until then.
+    init(_ recording: LibraryRecording, inspection: RecordingFileInspection?, recordingsFolder: URL?) {
+        let media = inspection?.media ?? recording.media
+        let folder = media.url.deletingLastPathComponent()
+        let isInRecordingsFolder = folder.deletingLastPathComponent().path() == recordingsFolder?.path()
+        let availability = inspection?.availability ?? .available
+        self.init(
+            id: recording.id,
+            title: recording.recording.title,
+            recordedAt: recording.recording.createdAt,
+            duration: recording.recording.duration,
+            sizeBytes: recording.fileSizeBytes,
+            kind: Kind(recording.captureMode),
+            status: availability == .available ? Status(recording.recording.processingStatus) : .missing,
+            folderName: folder.lastPathComponent,
+            location: Location(
+                folderPath: isInRecordingsFolder ? nil : folder.path(percentEncoded: false),
+                parentFolderName: isInRecordingsFolder ? nil : folder.deletingLastPathComponent().lastPathComponent,
+                fileNames: inspection?.fileNames ?? [media.url.lastPathComponent],
+                trashesFolder: inspection?.trashesFolder ?? false,
+                unavailability: availability == .available ? nil : availability
+            ),
+            isProcessingAvailable: false
+        )
+    }
+}
+
+extension LibraryItem.Kind {
+    fileprivate init(_ captureMode: CaptureMode) {
+        switch captureMode {
+        case .screen: self = .screen
+        case .window: self = .window
+        case .audioOnly: self = .audio
+        }
+    }
+}
+
+extension LibraryItem.Status {
+    /// `pending` means queued, and no queue exists yet, so it reads as simply recorded.
+    fileprivate init(_ status: Recording.ProcessingStatus) {
+        switch status {
+        case .recorded, .pending: self = .recorded
+        case .transcribing: self = .transcribing(progress: 0)
+        case .indexing: self = .indexing(progress: 0)
+        case .ready: self = .ready
+        case .failed: self = .failed
+        }
     }
 }

@@ -28,6 +28,10 @@
                 }
 
                 Menu("Library State") {
+                    Button("Live") {
+                        libraryViewModel.endPreview()
+                        openWindow(id: LibraryWindowView.windowID)
+                    }
                     ForEach(LibraryPreviewScenario.allCases) { scenario in
                         Button(scenario.title) {
                             libraryViewModel.apply(scenario)

@@ -8,7 +8,7 @@ Presentation depends on Application and Domain; Application depends on Domain. I
 
 ## Current state
 
-What exists in the code today (recording, windows, simulated state, App integration, models, tests) is described in [Implementation Status](IMPLEMENTATION.md). This document describes the target architecture; sections marked "planned" are intended future behavior, not current behavior. Recording capture, its lifecycle and media finalization are implemented; processing and SQLite persistence are not.
+What exists in the code today (recording, windows, simulated state, App integration, models, tests) is described in [Implementation Status](IMPLEMENTATION.md). This document describes the target architecture; sections marked "planned" are intended future behavior, not current behavior. Recording capture, its lifecycle, media finalization and the recording library's SQLite persistence are implemented; processing, transcripts and vector indexes are not.
 
 ## Feature and service boundaries (planned)
 
@@ -24,10 +24,13 @@ Services will own these responsibilities:
 | --- | --- |
 | RecordingCoordinator | Application workflow (implemented): the recording lifecycle and the single source of truth for an active recording |
 | Capture (`ScreenCaptureEngine`, `CaptureSourceDiscovery`) | Infrastructure adapters (implemented): source discovery, ScreenCaptureKit and microphone capture, media finalization |
-| RecordingRepository | Application contract (implemented with a JSON sidecar in `FileRecordingStore`): recording metadata; PersistenceService will implement it with SQLite |
+| LibraryService | Application service (implemented): library use cases, and the rules connecting database entries to files; its `revision` tells the Library window to reload |
+| RecordingRepository | Application contract (implemented by `SQLiteRecordingRepository`): the `recordings` table |
+| RecordingFileStore | Application contract (implemented by `LocalRecordingFileStore`): file availability, bookmarks, Finder, the Trash |
+| RecordingMetadataStore | Application contract (implemented by `FileRecordingStore`): the `recording.json` sidecar, a snapshot taken when a recording finishes |
 | TranscriptionService | Infrastructure adapter: on-demand offline WhisperKit processing and timestamped transcript segments |
 | EmbeddingService | Infrastructure adapter: on-demand Core ML inference, model load/unload, replaceable embedding implementation |
-| PersistenceService | Infrastructure implementation: SQLite metadata, file references, transcript segments, FTS5 and sqlite-vec indexes |
+| PersistenceService | Infrastructure implementation: transcript segments, FTS5 and sqlite-vec indexes, in the application database or beside it |
 | ProcessingCoordinator | Application workflow: durable sequential jobs, resource arbitration, cancellation, retries and recovery through core contracts |
 
 Application services orchestrate capture and processing through meaningful contracts owned by Application or Domain; infrastructure implements those contracts and keeps framework-specific types inside adapters. Domain owns business validation and state transition rules. Introduce protocols when an actual architectural boundary, substitution, or testing need appears. Native frameworks come from the SDK; import ScreenCaptureKit, AVFoundation, AVKit, CoreMedia, CoreAudio, CoreML, Accelerate, and AppKit only where required.
@@ -50,7 +53,7 @@ Checkpoints and idempotent stage writes must make interrupted jobs resumable or 
 
 ## Storage and models (planned)
 
-Use the sandbox Application Support directory for SQLite metadata and durable jobs, with SQLiteVecStore providing sqlite-vec and FTS5. Store media separately and reference it by stable identifiers/URLs; use security-scoped bookmarks for user-selected folders outside the container. Coordinate schema migrations, transactions, and filesystem failure recovery before production persistence is introduced. No database is initialized in this scaffold.
+Recording metadata is implemented: the sandbox Application Support directory holds `Verbatim/Library.sqlite`, opened through the system `SQLite3` with versioned migrations (`LibrarySchema`). **Deviation:** app tables do not go through SQLiteVecStore, whose `VectorStore` freezes an embedding dimension into the file at creation, before any embedding model is chosen, and offers no migrations for app tables. SQLiteVecStore remains planned for sqlite-vec and FTS5, and its tables can share this file or sit beside it. New tables should be added as new migrations and refer to `recordings.id`. Durable jobs are planned the same way. Media is stored separately and referenced by stable identifier, path and security-scoped bookmark.
 
 The intended initial embedding model is multilingual-e5-small, likely converted to Core ML. Download or install one model only when the feature is explicitly used; no weights are bundled at initialization. Load on demand after capture ends, unload when idle or recording starts, and isolate inference behind an implementation that can later be replaced. Persist model identity, version, dimensions, and normalization policy with the index so a replacement triggers a safe reindex. WhisperKit likewise runs exclusively in post-processing and never initializes at startup.
 

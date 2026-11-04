@@ -295,7 +295,7 @@ struct PauseTimelineTests {
 }
 
 /// Generates sample buffers shaped like what capture delivers.
-private enum SyntheticSamples {
+enum SyntheticSamples {
     enum SampleError: Error {
         case creationFailed
     }

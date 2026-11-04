@@ -23,18 +23,36 @@ enum LibraryFilter: CaseIterable, Hashable, Sendable {
             return item.recordedAt >= start
         case .processing:
             switch item.status {
-            case .transcribing, .indexing, .recorded, .failed: return true
+            case .transcribing, .indexing: return true
+            case .recorded, .failed: return item.canStartProcessing
             case .ready, .missing: return false
             }
         case .screen:
-            return item.kind == .screen
+            return item.kind != .audio
         case .audio:
             return item.kind == .audio
         }
     }
-}
 
-enum LibrarySortOrder: Sendable {
-    case newestFirst
-    case oldestFirst
+    /// The same section as a database query, for a recent cutoff computed from `now`.
+    func query(now: Date, calendar: Calendar) -> RecordingQuery {
+        var query = RecordingQuery()
+        switch self {
+        case .all:
+            break
+        case .recent:
+            query.createdSince = calendar.date(
+                byAdding: .day,
+                value: 1 - Self.recentDayCount,
+                to: calendar.startOfDay(for: now)
+            )
+        case .processing:
+            query.statuses = [.transcribing, .indexing]
+        case .screen:
+            query.captureModes = [.screen, .window]
+        case .audio:
+            query.captureModes = [.audioOnly]
+        }
+        return query
+    }
 }

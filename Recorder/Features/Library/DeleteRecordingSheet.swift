@@ -56,6 +56,14 @@ struct DeleteRecordingSheet: View {
 
     private var message: String {
         let size = LibraryFormat.size(item.sizeBytes)
+        if let location = item.location, !location.trashesFolder {
+            return String(
+                localized: """
+                    The recording’s files (\(size)) will be moved to the Trash. Anything else in the folder stays. \
+                    You can restore them from the Trash in Finder until it’s emptied.
+                    """
+            )
+        }
         return String(
             localized: """
                 The recording folder and its \(item.fileNames.count) files (\(size)) will be moved to the Trash. \
@@ -66,7 +74,7 @@ struct DeleteRecordingSheet: View {
 
     private var folderSummary: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(verbatim: "\(storage.folderPath)/\(item.folderName)")
+            Text(verbatim: item.location?.folderPath ?? "\(storage.folderPath)/\(item.folderName)")
                 .fontWeight(.medium)
             Text(LibraryFormat.fileSummary(item.fileNames))
                 .foregroundStyle(VerbatimColor.secondaryText)

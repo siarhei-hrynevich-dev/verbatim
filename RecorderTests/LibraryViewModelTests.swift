@@ -78,7 +78,7 @@ struct LibraryViewModelTests {
     @Test func sortingReversesTheList() {
         let viewModel = makeViewModel()
 
-        viewModel.toggleSortOrder()
+        viewModel.select(sortOrder: .oldestFirst)
 
         #expect(viewModel.visibleItems.first?.title == "Podcast Rough Cut")
         #expect(viewModel.sortOrder == .oldestFirst)

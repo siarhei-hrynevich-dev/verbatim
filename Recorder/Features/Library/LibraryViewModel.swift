@@ -1,17 +1,22 @@
 import Foundation
 import Observation
+import os
 
 /// Presentation state of the Library window.
 ///
-/// This is a layout-only implementation: recordings, processing progress and search results come from fixed
-/// sample data, and removing, deleting or retrying only changes local state. No storage, Finder, transcription
-/// or search service is involved yet.
+/// Live, it shows what `LibraryService` holds: the database does the filtering, sorting and searching, and `reload()`
+/// runs whenever `reloadKey` changes. For design review it can instead show a `LibraryPreviewScenario`, with fixed
+/// sample recordings and simulated actions that touch nothing on disk.
 @MainActor
 @Observable
 final class LibraryViewModel {
     enum Content: Equatable {
+        case loading
+        case failed(LibraryIssue)
         case recordings
         case searchResults(LibrarySearchResults)
+        /// A search found nothing, among recordings that exist.
+        case noResults
         /// The library has no recordings at all.
         case empty
     }
@@ -20,60 +25,138 @@ final class LibraryViewModel {
     struct Removal: Equatable {
         let item: LibraryItem
         let index: Int
+        /// The stored entry to put back; sample recordings have none.
+        var recording: LibraryRecording?
     }
 
-    let storage: LibraryStorage
+    /// Everything that requires asking the database again. The window reloads when this changes.
+    struct ReloadKey: Equatable {
+        let revision: Int
+        let refreshCount: Int
+        let isPreviewing: Bool
+        let filter: LibraryFilter
+        let sortOrder: RecordingSortOrder
+        let searchText: String
+    }
 
-    private(set) var items: [LibraryItem] = []
-    private(set) var filter: LibraryFilter = .all
-    private(set) var sortOrder: LibrarySortOrder = .newestFirst
-    private(set) var searchText = ""
-    private(set) var selectedItemID: LibraryItem.ID?
-    private(set) var contextMenuItemID: LibraryItem.ID?
-    private(set) var pendingDeletionID: LibraryItem.ID?
-    private(set) var lastRemoval: Removal?
+    enum LoadState: Equatable {
+        case loading
+        case loaded
+        case failed(LibraryIssue)
+    }
 
-    private let previewData: LibraryPreviewData
-    private let now: Date
-    private let calendar: Calendar
+    // Only this type and its extensions in `LibraryViewModel+*.swift` write these; Swift has no narrower access level
+    // that spans files. Views read them and call the actions.
+    var storage: LibraryStorage
+    var items: [LibraryItem] = []
+    var filter: LibraryFilter = .all
+    var sortOrder: RecordingSortOrder = .newestFirst
+    var searchText = ""
+    var selectedItemID: LibraryItem.ID?
+    var contextMenuItemID: LibraryItem.ID?
+    var pendingDeletionID: LibraryItem.ID?
+    var renamingItemID: LibraryItem.ID?
+    var locatingItemID: LibraryItem.ID?
+    var lastRemoval: Removal?
+    var issue: LibraryIssue?
+    /// Whether this shows a design scenario instead of the real library.
+    var isPreviewing: Bool
 
+    var loadState = LoadState.loading
+    var counts: [LibraryFilter: Int] = [:]
+    var recordings: [UUID: LibraryRecording] = [:]
+    var lastInspections: [UUID: RecordingFileInspection] = [:]
+    var refreshCount = 0
+
+    /// Runs library operations one at a time, in request order, for as long as the app does.
+    @ObservationIgnored private var lastOperation: Task<Void, Never>?
+
+    @ObservationIgnored let service: LibraryService?
+    let previewData: LibraryPreviewData
+    private let fixedNow: Date?
+    let calendar: Calendar
+
+    /// The real library. A `previewScenario` starts on sample data instead, until `endPreview()`.
+    init(
+        service: LibraryService,
+        previewScenario: LibraryPreviewScenario? = nil,
+        calendar: Calendar = .current
+    ) {
+        self.service = service
+        previewData = .sample()
+        fixedNow = nil
+        self.calendar = calendar
+        storage = LibraryStorage(folderPath: "", usedBytes: 0, freeBytes: 0)
+        isPreviewing = false
+        if let previewScenario {
+            apply(previewScenario)
+        }
+    }
+
+    /// Sample data only, for SwiftUI previews and tests of the design states.
     init(
         previewData: LibraryPreviewData = .sample(),
         scenario: LibraryPreviewScenario = .list,
         now: Date = .now,
         calendar: Calendar = .current
     ) {
+        service = nil
         self.previewData = previewData
-        self.now = now
+        fixedNow = now
         self.calendar = calendar
         storage = previewData.storage
+        isPreviewing = true
         apply(scenario)
     }
 
     // MARK: - Derived state
 
-    /// Recordings in the selected sidebar section, in the chosen order.
+    var reloadKey: ReloadKey {
+        ReloadKey(
+            revision: service?.revision ?? 0,
+            refreshCount: refreshCount,
+            isPreviewing: isPreviewing,
+            filter: filter,
+            sortOrder: sortOrder,
+            searchText: searchText
+        )
+    }
+
+    /// Recordings in the selected sidebar section, in the chosen order. When live, the database has done both.
     var visibleItems: [LibraryItem] {
+        guard isPreviewing else {
+            return items
+        }
         let filtered = items.filter { filter.includes($0, now: now, calendar: calendar) }
         return filtered.sorted { first, second in
             switch sortOrder {
             case .newestFirst: first.recordedAt > second.recordedAt
             case .oldestFirst: first.recordedAt < second.recordedAt
+            case .name: first.title.localizedStandardCompare(second.title) == .orderedAscending
+            case .duration: first.duration > second.duration
             }
         }
     }
 
     var isSearching: Bool {
-        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !trimmedSearchText.isEmpty
     }
 
     var content: Content {
-        if isSearching {
-            return .searchResults(
-                SimulatedLibrarySearch.results(for: searchText, in: items, transcript: previewData.transcript)
-            )
+        if isPreviewing {
+            return previewContent
         }
-        return items.isEmpty ? .empty : .recordings
+        switch loadState {
+        case .loading:
+            return .loading
+        case .failed(let issue):
+            return .failed(issue)
+        case .loaded:
+            if counts[.all, default: 0] == 0 {
+                return .empty
+            }
+            return isSearching && items.isEmpty ? .noResults : .recordings
+        }
     }
 
     var selectedItem: LibraryItem? {
@@ -88,17 +171,25 @@ final class LibraryViewModel {
         item(withID: pendingDeletionID)
     }
 
-    /// The path bar describes the selected recording's folder while the list is shown.
-    var pathBarItem: LibraryItem? {
-        isSearching ? nil : selectedItem
+    var pendingRename: LibraryItem? {
+        item(withID: renamingItemID)
     }
 
+    /// The path bar describes the selected recording's folder while the list is shown.
+    var pathBarItem: LibraryItem? {
+        isPreviewing && isSearching ? nil : selectedItem
+    }
+
+    /// The processing queue exists only in the design so far.
     var showsProcessingNote: Bool {
-        filter == .processing && !isSearching
+        isPreviewing && filter == .processing && !isSearching
     }
 
     func count(for filter: LibraryFilter) -> Int {
-        items.count { filter.includes($0, now: now, calendar: calendar) }
+        guard isPreviewing else {
+            return counts[filter, default: 0]
+        }
+        return items.count { filter.includes($0, now: now, calendar: calendar) }
     }
 
     /// How many recordings are being transcribed and indexed.
@@ -115,133 +206,64 @@ final class LibraryViewModel {
         return (transcribing, indexing)
     }
 
-    // MARK: - Browsing
-
-    /// Shows a sidebar section. Like choosing a section in Finder, this ends a search.
-    func select(filter: LibraryFilter) {
-        self.filter = filter
-        searchText = ""
-        contextMenuItemID = nil
-        if let selectedItemID, !visibleItems.contains(where: { $0.id == selectedItemID }) {
-            self.selectedItemID = nil
-        }
+    /// Waits for the requested operations to finish.
+    func waitUntilSettled() async {
+        await lastOperation?.value
     }
 
-    func updateSearchText(_ text: String) {
-        searchText = text
-        contextMenuItemID = nil
-    }
-
-    func toggleSortOrder() {
-        sortOrder = sortOrder == .newestFirst ? .oldestFirst : .newestFirst
-    }
-
-    func select(_ id: LibraryItem.ID?) {
-        selectedItemID = id
-        contextMenuItemID = nil
-    }
-
-    /// Moves the selection through the visible list, as the arrow keys do. Without a selection, moving down
-    /// selects the first recording and moving up the last.
-    func moveSelection(by offset: Int) {
-        let visible = visibleItems
-        guard !visible.isEmpty else {
+    /// Runs an operation after those already requested, presenting its failure. Does nothing in a design scenario.
+    func perform(_ operation: @escaping @MainActor (LibraryService) async throws -> Void) {
+        guard let service, !isPreviewing else {
             return
         }
-        guard let selectedItemID, let index = visible.firstIndex(where: { $0.id == selectedItemID }) else {
-            select(offset >= 0 ? visible.first?.id : visible.last?.id)
-            return
+        let previous = lastOperation
+        lastOperation = Task { [weak self] in
+            await previous?.value
+            do {
+                try await operation(service)
+            } catch {
+                Self.logger.error("A Library action failed: \(String(describing: error))")
+                self?.issue = LibraryIssue(error)
+            }
         }
-        let newIndex = min(max(index + offset, 0), visible.count - 1)
-        select(visible[newIndex].id)
-    }
-
-    // MARK: - Context menu and deletion
-
-    func showContextMenu(for id: LibraryItem.ID) {
-        selectedItemID = id
-        contextMenuItemID = id
-    }
-
-    func dismissContextMenu() {
-        contextMenuItemID = nil
-    }
-
-    func requestDeletion(of id: LibraryItem.ID) {
-        contextMenuItemID = nil
-        pendingDeletionID = id
-    }
-
-    func cancelDeletion() {
-        pendingDeletionID = nil
-    }
-
-    /// Removes the recording from the Library and offers Undo. Its files stay in Finder.
-    func removeFromLibrary(_ id: LibraryItem.ID) {
-        remove(id, offeringUndo: true)
-    }
-
-    /// Simulates moving the recording folder to the Trash; it only leaves the list.
-    func moveToTrash(_ id: LibraryItem.ID) {
-        remove(id, offeringUndo: false)
-    }
-
-    func undoRemoval() {
-        guard let lastRemoval else {
-            return
-        }
-        items.insert(lastRemoval.item, at: min(lastRemoval.index, items.count))
-        selectedItemID = lastRemoval.item.id
-        self.lastRemoval = nil
-    }
-
-    // MARK: - Processing
-
-    /// Simulates starting transcription for a recording without a transcript or with failed processing.
-    func startProcessing(_ id: LibraryItem.ID) {
-        guard let index = items.firstIndex(where: { $0.id == id }), items[index].canStartProcessing else {
-            return
-        }
-        items[index].status = .transcribing(progress: Self.initialProgress)
-        contextMenuItemID = nil
-    }
-
-    // MARK: - Preview scenarios
-
-    func apply(_ scenario: LibraryPreviewScenario) {
-        items = scenario == .empty ? [] : previewData.items
-        filter = scenario == .processing ? .processing : .all
-        sortOrder = .newestFirst
-        searchText = scenario == .search ? LibraryPreviewScenario.sampleSearchQuery : ""
-        lastRemoval = nil
-        selectedItemID = sampleItemID(at: Self.selectedSampleIndex(for: scenario))
-        contextMenuItemID = scenario == .context ? selectedItemID : nil
-        pendingDeletionID = scenario == .confirm ? selectedItemID : nil
     }
 
     // MARK: - Private
 
-    private func item(withID id: LibraryItem.ID?) -> LibraryItem? {
+    var now: Date {
+        fixedNow ?? .now
+    }
+
+    var trimmedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var previewContent: Content {
+        if isSearching {
+            return .searchResults(
+                SimulatedLibrarySearch.results(for: searchText, in: items, transcript: previewData.transcript)
+            )
+        }
+        return items.isEmpty ? .empty : .recordings
+    }
+
+    func item(withID id: LibraryItem.ID?) -> LibraryItem? {
         guard let id else {
             return nil
         }
         return items.first { $0.id == id }
     }
 
-    private func remove(_ id: LibraryItem.ID, offeringUndo: Bool) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else {
-            return
-        }
-        let nextSelection = selectedItemID == id ? neighbor(ofVisibleItem: id) : selectedItemID
-        let removed = items.remove(at: index)
-        lastRemoval = offeringUndo ? Removal(item: removed, index: index) : nil
+    func selectNeighbor(of id: LibraryItem.ID) {
         contextMenuItemID = nil
         pendingDeletionID = nil
-        selectedItemID = nextSelection
+        if selectedItemID == id {
+            selectedItemID = neighbor(ofVisibleItem: id)
+        }
     }
 
     /// The recording that takes a removed one's place in the visible list, so keyboard work can continue.
-    private func neighbor(ofVisibleItem id: LibraryItem.ID) -> LibraryItem.ID? {
+    func neighbor(ofVisibleItem id: LibraryItem.ID) -> LibraryItem.ID? {
         let visible = visibleItems
         guard let index = visible.firstIndex(where: { $0.id == id }) else {
             return nil
@@ -252,24 +274,5 @@ final class LibraryViewModel {
         return index > 0 ? visible[index - 1].id : nil
     }
 
-    private func sampleItemID(at index: Int?) -> LibraryItem.ID? {
-        guard let index, items.indices.contains(index) else {
-            return nil
-        }
-        return items[index].id
-    }
-
-    /// The design selects Architecture Review, Weekly Team Sync while processing, and Design Critique in the
-    /// delete confirmation.
-    private static func selectedSampleIndex(for scenario: LibraryPreviewScenario) -> Int? {
-        switch scenario {
-        case .list, .search, .context: 0
-        case .processing: 1
-        case .confirm: 5
-        case .empty: nil
-        }
-    }
-
-    /// Restarted processing shows a sliver of progress right away, as in the design prototype.
-    private static let initialProgress = 0.02
+    static let logger = Logger(subsystem: "dev.local.Recorder", category: "Library")
 }

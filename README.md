@@ -1,6 +1,6 @@
 # Recorder
 
-A native Swift 6 / SwiftUI macOS screen recorder. The Recorder window records screens, windows and audio with ScreenCaptureKit and AVFoundation, keeping microphone and system audio as separate tracks. The app also has the designed Library, Viewer and Settings windows (layout only, with simulated state), a Dock menu, menu bar recording indicator and app icon, and Swift Testing coverage. Real playback, a recordings library, transcription, embeddings, search, and processing workers are planned and are not implemented.
+A native Swift 6 / SwiftUI macOS screen recorder. The Recorder window records screens, windows and audio with ScreenCaptureKit and AVFoundation, keeping microphone and system audio as separate tracks. The Library window tracks finished recordings in a local SQLite database: history, renaming, title and date search, sorting, Finder actions, removal, deletion to the Trash, and missing-file handling. The app also has the designed Viewer and Settings windows (layout only, with simulated state), a Dock menu, menu bar recording indicator and app icon, and Swift Testing coverage. Real in-app playback, transcription, embeddings, transcript search, and processing workers are planned and are not implemented.
 
 ## Requirements
 
@@ -38,15 +38,15 @@ Swift Package Manager is configured directly in Xcode. Exact releases are pinned
 - [argmax-oss-swift 1.1.1](https://github.com/argmaxinc/argmax-oss-swift/tree/v1.1.1): only the `WhisperKit` product.
 - [SQLiteVecKit 0.1.1](https://github.com/carlosypunto/SQLiteVecKit/tree/0.1.1): `SQLiteVecStore` product.
 
-Commit `Recorder.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` when updating packages. Initial resolution needs network access for package source; tests need no network, permissions, media, models, or databases. No AI model weights are bundled, downloaded, or loaded, and no database is opened on startup. Import smoke tests check the libraries without initializing engines.
+Commit `Recorder.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` when updating packages. Initial resolution needs network access for package source; tests need no network, permissions, or models, and use only temporary databases and media they create. No AI model weights are bundled, downloaded, or loaded, and no database is opened on startup: the Library's opens on first use. It uses the system `SQLite3`, the library SQLiteVecKit also links; `VectorStore` itself is not used yet, because it freezes an embedding dimension into the database file. Import smoke tests check the libraries without initializing engines.
 
 Apple frameworks are supplied by the macOS SDK: ScreenCaptureKit, AVFoundation, AVKit, CoreMedia, CoreAudio, CoreML, Accelerate, and AppKit. Future features should import them where used; Swift autolinking handles framework linkage.
 
 ## Organization
 
 - `Recorder/Features/Recording`: the Recorder window (views, `RecorderViewModel`) and, under `Preview`, the sample data and scenarios for reviewing its design states.
-- `Recorder/Application`: `RecordingCoordinator`, which owns the recording lifecycle, and the contracts Infrastructure implements.
-- `Recorder/Infrastructure`: capture and media output, recording files and metadata, preferences, permissions.
+- `Recorder/Application`: `RecordingCoordinator`, which owns the recording lifecycle, `LibraryService`, which owns the library's use cases, and the contracts Infrastructure implements.
+- `Recorder/Infrastructure`: capture and media output, the SQLite database, recording files and thumbnails, preferences, permissions.
 - `Recorder/Features/Library`: the Library window (views, `LibraryViewModel`) and, under `Preview`, its sample recordings, simulated search and scenarios.
 - `Recorder/Features/Viewer` and `Recorder/Features/Settings`: the Viewer and Settings windows, each with view models and `Preview` sample data and scenarios.
 - `Recorder/App`: the composition root (`AppComposition`) and AppKit integration: `AppDelegate` (Dock menu, quit confirmation, holder of the Recorder view model), `RecordingIndicators` (menu bar item and Dock badge while recording), `RecordingMenus`, `WindowNavigator` (opens SwiftUI windows from AppKit menus), and the Debug menu.
@@ -72,9 +72,11 @@ Details are in [Implementation Status](Docs/IMPLEMENTATION.md).
 
 The Recorder's “01 Recorder” design states can be reviewed with sample data and no capture. Choose a state with the launch argument `-RecorderPreviewScenario <state>` (Xcode: Product › Scheme › Edit Scheme › Arguments), from **Debug › Recorder State** in Debug builds, or in the SwiftUI previews of `RecorderWindowView`. **Debug › Recorder State › Live** returns to real capture. States: `idle`, `picker`, `recording`, `permission`, `mic`, `source`, `folder`, `disk`, `saved`. The window follows the system Light or Dark appearance and accent color.
 
-## Library window preview states
+## Library window
 
-The Library window implements the “02 Library” design without storage or processing: recordings, processing progress, search results, removal and deletion are simulated, Open Recording, Open Transcript and search moments open the Viewer, New Recording brings back the Recorder, and Finder actions are not connected yet. Choose a state with `-LibraryPreviewScenario <state>`, which also opens the window at launch, from **Debug › Library State** in Debug builds, or in the SwiftUI previews of `LibraryWindowView`. States: `list`, `processing`, `search`, `context`, `confirm`, `empty`. In the search field, try “maya”, “search” or “budget”.
+Finished recordings appear in the Library automatically. Metadata lives in `Library.sqlite` under Application Support; media stays where it was recorded. Open Recording uses the system's default player until the Viewer plays real media. Remove from Library keeps the files; Delete Recording moves them to the Trash. Files moved in Finder are followed through their bookmarks; files that cannot be found show as missing and offer Locate… and Remove from Library. Details are in [Implementation Status](Docs/IMPLEMENTATION.md).
+
+The “02 Library” design states remain available with sample data that touches nothing on disk, where processing, transcript search results and the Viewer are simulated. Choose a state with `-LibraryPreviewScenario <state>`, which also opens the window at launch, from **Debug › Library State** in Debug builds (**Live** returns to the real library), or in the SwiftUI previews of `LibraryWindowView`. States: `list`, `processing`, `search`, `context`, `confirm`, `empty`. In the search field, try “maya”, “search” or “budget”.
 
 Both windows follow the system appearance and accent color. To review the design's accent tweak, pass `-VerbatimAccent blue|indigo|teal|graphite` or use **Debug › Accent Color**; **Debug › Appearance** switches Light and Dark.
 
@@ -90,4 +92,4 @@ The app has the design's icon (“04 Dock”). Clicking the Dock icon brings bac
 
 The Settings window implements the “05 Settings” design in the native Settings scene (⌘, or the Recorder's gear) without real models, storage or updates: downloads, model preparation, index building and the update check are simulated while the window is open, and storage figures are sample data. No model is downloaded or loaded. Choose a state with `-SettingsPreviewScenario <state>`, which also opens Settings at launch, from **Debug › Settings State**, or in the SwiftUI previews of `SettingsWindowView`. States: `general`, `models`, `removeModel`, `storage`, `moveRecordings`, `about`, `licenses`.
 
-Keyboard: in the list, Up and Down move the selection, Return opens, Delete (or ⌘⌫) asks to delete, and Escape closes the actions menu. The menu takes focus when it opens (Up, Down, Return, Escape). Escape cancels the delete sheet, and Edit › Undo (⌘Z) restores a recording removed from the Library.
+Keyboard: in the Library list, Up and Down move the selection, Return opens, ⌘R shows in Finder, ⌥⌘R opens the folder, Delete (or ⌘⌫) asks to delete, and Escape closes the actions menu. The menu takes focus when it opens (Up, Down, Return, Escape). Escape cancels the delete sheet, and Edit › Undo (⌘Z) restores a recording removed from the Library.

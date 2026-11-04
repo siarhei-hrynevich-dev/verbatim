@@ -42,7 +42,7 @@ struct ViewerPlayerView: View {
     @ViewBuilder
     private var media: some View {
         switch viewModel.recording.item.kind {
-        case .screen:
+        case .screen, .window:
             VideoFrame(isPaused: !viewModel.isPlaying)
                 .contentShape(Rectangle())
                 .onTapGesture {

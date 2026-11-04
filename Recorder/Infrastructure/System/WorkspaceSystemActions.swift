@@ -17,6 +17,18 @@ struct WorkspaceSystemActions: SystemActions {
         }
     }
 
+    func revealInFinder(_ url: URL) async {
+        await MainActor.run {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
+
+    func openFile(_ url: URL) async -> Bool {
+        await MainActor.run {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     private static func urlString(for pane: SystemSettingsPane) -> String {
         switch pane {
         case .screenRecording: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"

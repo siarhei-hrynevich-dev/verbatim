@@ -3,6 +3,8 @@ import Foundation
 /// Metadata only; media files and processing jobs will be persisted separately.
 struct Recording: Identifiable, Codable, Equatable, Sendable {
     enum ProcessingStatus: String, Codable, CaseIterable, Sendable {
+        /// Saved with no processing started: the neutral state of every recording until a processing queue exists.
+        case recorded
         case pending
         case transcribing
         case indexing
@@ -50,5 +52,27 @@ struct Recording: Identifiable, Codable, Equatable, Sendable {
         self.createdAt = createdAt
         duration = validatedMediaDuration.isFinite ? max(validatedMediaDuration, 0) : 0
         self.processingStatus = processingStatus
+    }
+
+    /// The same recording under a new title, validated like any other.
+    func renamed(to newTitle: String) throws -> Recording {
+        try Recording(
+            id: id,
+            title: newTitle,
+            createdAt: createdAt,
+            duration: duration,
+            processingStatus: processingStatus
+        )
+    }
+
+    /// The same recording, now described by media of a different length, as after locating a moved file.
+    func withDuration(_ newDuration: TimeInterval) throws -> Recording {
+        try Recording(
+            id: id,
+            title: title,
+            createdAt: createdAt,
+            duration: newDuration,
+            processingStatus: processingStatus
+        )
     }
 }

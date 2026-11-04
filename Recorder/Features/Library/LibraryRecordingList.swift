@@ -49,6 +49,7 @@ struct LibraryRecordingList: View {
             .onKeyPress(.upArrow) { handle { viewModel.moveSelection(by: -1) } }
             .onKeyPress(.downArrow) { handle { viewModel.moveSelection(by: 1) } }
             .onKeyPress(.return) { handle(openSelectedRecording) }
+            .onKeyPress(keys: ["r"]) { handleFinderShortcut($0) }
             .onKeyPress { press in
                 guard Self.isDeleteKey(press) else {
                     return .ignored
@@ -106,7 +107,8 @@ struct LibraryRecordingList: View {
             open: { openRecording(item.id) },
             showActions: { viewModel.showContextMenu(for: item.id) },
             requestDeletion: { viewModel.requestDeletion(of: item.id) },
-            performStatusAction: { performStatusAction(item) }
+            performStatusAction: { performStatusAction(item) },
+            loadThumbnail: { await viewModel.thumbnail(for: item.id) }
         )
         .anchorPreference(key: LibraryRowAnchorKey.self, value: .bounds) { anchor in
             item.id == viewModel.contextMenuItemID ? [item.id: anchor] : [:]
@@ -123,6 +125,19 @@ struct LibraryRecordingList: View {
         if let selectedItemID = viewModel.selectedItemID {
             viewModel.requestDeletion(of: selectedItemID)
         }
+    }
+
+    /// ⌘R shows the selected recording in Finder and ⌥⌘R opens its folder, as the actions menu says.
+    private func handleFinderShortcut(_ press: KeyPress) -> KeyPress.Result {
+        guard press.modifiers.contains(.command), let item = viewModel.selectedItem, !item.isMissing else {
+            return .ignored
+        }
+        if press.modifiers.contains(.option) {
+            viewModel.openFolder(of: item.id)
+        } else {
+            viewModel.showInFinder(item.id)
+        }
+        return .handled
     }
 
     private func handle(_ action: () -> Void) -> KeyPress.Result {

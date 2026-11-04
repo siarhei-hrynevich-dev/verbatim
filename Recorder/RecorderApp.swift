@@ -3,9 +3,6 @@ import SwiftUI
 @main
 struct RecorderApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var libraryViewModel = LibraryViewModel(
-        scenario: LibraryPreviewScenario.fromLaunchArguments() ?? .list
-    )
     @State private var viewerViewModel = ViewerViewModel(
         scenario: ViewerPreviewScenario.fromLaunchArguments() ?? .video
     )
@@ -34,7 +31,7 @@ struct RecorderApp: App {
             #if DEBUG
                 DebugCommands(
                     recorderViewModel: appDelegate.recorderViewModel,
-                    libraryViewModel: libraryViewModel,
+                    libraryViewModel: appDelegate.libraryViewModel,
                     viewerViewModel: viewerViewModel,
                     settingsViewModel: settingsViewModel,
                     accent: $accent
@@ -43,12 +40,11 @@ struct RecorderApp: App {
         }
 
         Window("Recordings Library", id: LibraryWindowView.windowID) {
-            // Finder actions, renaming and processing control are not connected yet.
             LibraryWindowView(
-                viewModel: libraryViewModel,
+                viewModel: appDelegate.libraryViewModel,
                 accent: accent,
                 actions: LibraryWindowActions(
-                    openRecording: openInViewer,
+                    openRecording: openRecording,
                     openTranscript: { openInViewer($0, at: nil) },
                     newRecording: navigator.showRecorder,
                     openSettings: navigator.showSettings
@@ -80,9 +76,19 @@ struct RecorderApp: App {
         }
     }
 
-    /// Shows a Library recording in the Viewer, at a transcript position when one is given.
+    /// The Viewer only simulates playback so far, so real recordings open in the system's media player. Sample
+    /// recordings keep going to the Viewer for design review.
+    private func openRecording(_ id: LibraryItem.ID, at timestamp: TimeInterval?) {
+        if appDelegate.libraryViewModel.isPreviewing {
+            openInViewer(id, at: timestamp)
+        } else {
+            appDelegate.libraryViewModel.openInSystemPlayer(id)
+        }
+    }
+
+    /// Shows a sample recording in the Viewer, at a transcript position when one is given.
     private func openInViewer(_ id: LibraryItem.ID, at timestamp: TimeInterval?) {
-        guard let item = libraryViewModel.items.first(where: { $0.id == id }) else {
+        guard let item = appDelegate.libraryViewModel.items.first(where: { $0.id == id }) else {
             return
         }
         viewerViewModel.open(item, at: timestamp)

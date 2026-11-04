@@ -27,7 +27,8 @@ final class RecordingCoordinator {
     @ObservationIgnored private let engine: any CaptureEngine
     @ObservationIgnored private let preflight: RecordingPreflight
     @ObservationIgnored private let destinations: any RecordingDestinationStore
-    @ObservationIgnored private let repository: any RecordingRepository
+    @ObservationIgnored private let metadataStore: any RecordingMetadataStore
+    @ObservationIgnored private let library: any FinishedRecordingRegistry
     @ObservationIgnored private let now: @Sendable () -> Date
 
     /// The start or stop in progress. Lives as long as the coordinator, independent of any window.
@@ -51,13 +52,15 @@ final class RecordingCoordinator {
         engine: any CaptureEngine,
         permissions: any CapturePermissions,
         destinations: any RecordingDestinationStore,
-        repository: any RecordingRepository,
+        metadataStore: any RecordingMetadataStore,
+        library: any FinishedRecordingRegistry,
         now: @escaping @Sendable () -> Date = { .now }
     ) {
         self.engine = engine
         preflight = RecordingPreflight(permissions: permissions, destinations: destinations)
         self.destinations = destinations
-        self.repository = repository
+        self.metadataStore = metadataStore
+        self.library = library
         self.now = now
     }
 
@@ -208,15 +211,22 @@ final class RecordingCoordinator {
         }
     }
 
-    /// The media is already safe here, so a metadata failure is reported without touching it.
+    /// The media is already safe here, so a failure to store its details is reported without touching it. The sidecar
+    /// and the Library are independent: one failing does not stop the other.
     private func saveCompleted(_ recording: CurrentRecording, media: CapturedMedia) async -> RecordingOutcome {
         var metadataErrorDetail: String?
         let metadata = recording.metadata(media: media, completion: .complete)
         do {
-            try await repository.save(metadata, in: recording.destination)
+            try await metadataStore.save(metadata, in: recording.destination)
         } catch {
             Self.logger.error("Could not save recording metadata: \(String(describing: error))")
             metadataErrorDetail = error.localizedDescription
+        }
+        do {
+            try await library.addFinishedRecording(metadata, destination: recording.destination)
+        } catch {
+            Self.logger.error("Could not add a recording to the Library: \(String(describing: error))")
+            metadataErrorDetail = metadataErrorDetail ?? error.localizedDescription
         }
         return RecordingOutcome(
             metadata: metadata,
@@ -254,7 +264,7 @@ final class RecordingCoordinator {
             audioSources: recording.configuration.audioSources
         )
         do {
-            try await repository.save(
+            try await metadataStore.save(
                 recording.metadata(media: media, completion: .incomplete),
                 in: recording.destination
             )
@@ -338,13 +348,12 @@ extension RecordingCoordinator.CurrentRecording {
         media: CapturedMedia,
         completion: RecordingMetadata.Completion
     ) -> RecordingMetadata {
-        let isTranscriptionRequested = configuration.transcribesWhenFinished
-        return RecordingMetadata(
+        RecordingMetadata(
             recording: Recording(
                 id: id,
                 createdAt: createdAt,
                 validatedMediaDuration: media.duration,
-                processingStatus: isTranscriptionRequested ? .pending : .ready
+                processingStatus: .recorded
             ),
             mediaFileName: destination.mediaURL.lastPathComponent,
             captureMode: configuration.target?.mode ?? .audioOnly,
@@ -353,7 +362,7 @@ extension RecordingCoordinator.CurrentRecording {
             audioSources: media.audioSources,
             fileSizeBytes: media.fileSizeBytes,
             completion: completion,
-            transcriptionRequested: isTranscriptionRequested
+            transcriptionRequested: configuration.transcribesWhenFinished
         )
     }
 }

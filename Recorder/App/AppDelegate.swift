@@ -3,12 +3,24 @@ import AppKit
 /// AppKit integration that SwiftUI scenes do not provide: the Dock menu, recording indicators in the menu bar and
 /// Dock, and confirmation before quitting during a recording.
 ///
-/// It holds the composition root's Recorder view model, because the Dock menu and menu bar item act on the same
-/// recording as the Recorder window. The recording itself lives in `RecordingCoordinator`, so it outlasts any window.
+/// It holds the composition root's view models, because the Dock menu and menu bar item act on the same recording as
+/// the Recorder window, and a finished recording must reach the Library with its window closed. The recording itself
+/// lives in `RecordingCoordinator`, so it outlasts any window.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let recorderViewModel = AppComposition.makeRecorderViewModel(scenario: .fromLaunchArguments())
+    private let viewModels = AppComposition.makeViewModels(
+        recorderScenario: .fromLaunchArguments(),
+        libraryScenario: .fromLaunchArguments()
+    )
     let navigator = WindowNavigator()
+
+    var recorderViewModel: RecorderViewModel {
+        viewModels.recorder
+    }
+
+    var libraryViewModel: LibraryViewModel {
+        viewModels.library
+    }
 
     override init() {
         super.init()

@@ -11,6 +11,7 @@ struct LibraryContextMenu: View {
         case openTranscript
         case showInFinder
         case openRecordingFolder
+        case locateFile
         case rename
         case retryProcessing
         case removeFromLibrary
@@ -26,7 +27,7 @@ struct LibraryContextMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(Self.sections.enumerated()), id: \.offset) { index, section in
+            ForEach(Array(sections.enumerated()), id: \.offset) { index, section in
                 if index > 0 {
                     VerbatimColor.separator
                         .frame(height: 0.5)
@@ -116,7 +117,7 @@ struct LibraryContextMenu: View {
     }
 
     private func moveHighlight(by offset: Int) -> KeyPress.Result {
-        let enabled = Self.sections.flatMap { $0 }.filter { $0.isEnabled(for: item) }
+        let enabled = sections.flatMap { $0 }.filter { $0.isEnabled(for: item) }
         guard !enabled.isEmpty else {
             return .handled
         }
@@ -136,12 +137,16 @@ struct LibraryContextMenu: View {
         return .handled
     }
 
-    private static let sections: [[Command]] = [
-        [.openRecording, .openTranscript],
-        [.showInFinder, .openRecordingFolder],
-        [.rename, .retryProcessing],
-        [.removeFromLibrary, .deleteRecording]
-    ]
+    /// Locate File… appears only when it can help.
+    private var sections: [[Command]] {
+        [
+            [.openRecording, .openTranscript],
+            item.isMissing
+                ? [.locateFile, .showInFinder, .openRecordingFolder] : [.showInFinder, .openRecordingFolder],
+            [.rename, .retryProcessing],
+            [.removeFromLibrary, .deleteRecording]
+        ]
+    }
 }
 
 extension LibraryContextMenu.Command {
@@ -151,7 +156,8 @@ extension LibraryContextMenu.Command {
         case .openTranscript: "Open Transcript"
         case .showInFinder: "Show in Finder"
         case .openRecordingFolder: "Open Recording Folder"
-        case .rename: "Rename"
+        case .locateFile: "Locate File…"
+        case .rename: "Rename…"
         case .retryProcessing: "Retry Processing"
         case .removeFromLibrary: "Remove from Library"
         case .deleteRecording: "Delete Recording…"
@@ -190,7 +196,9 @@ extension LibraryContextMenu.Command {
         switch self {
         case .openTranscript: item.status == .ready
         case .retryProcessing: item.canStartProcessing
-        default: true
+        // These need the media, which is what's missing.
+        case .openRecording, .showInFinder, .openRecordingFolder, .deleteRecording: !item.isMissing
+        case .locateFile, .rename, .removeFromLibrary: true
         }
     }
 }

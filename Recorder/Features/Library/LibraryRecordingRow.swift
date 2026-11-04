@@ -14,12 +14,14 @@ struct LibraryRecordingRow: View {
     let showActions: () -> Void
     let requestDeletion: () -> Void
     let performStatusAction: () -> Void
+    var loadThumbnail: () async -> Data? = { nil }
 
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: LibraryColumn.spacing) {
-            RecordingThumbnail(kind: item.kind).libraryColumn(.thumbnail)
+            RecordingThumbnail(kind: item.kind, isUnavailable: item.isMissing, load: loadThumbnail)
+                .libraryColumn(.thumbnail)
             name.libraryColumn(.name)
             secondaryText(LibraryFormat.recordedDate(item.recordedAt)).libraryColumn(.date)
             secondaryText(LibraryFormat.duration(item.duration)).monospacedDigit().libraryColumn(.duration)
@@ -44,24 +46,32 @@ struct LibraryRecordingRow: View {
         .accessibilityAction(.default, open)
         .accessibilityAction(.showMenu, showActions)
         .accessibilityActions {
-            if let title = item.status.actionTitle {
+            if let title = item.statusActionTitle {
                 Button(title, action: performStatusAction)
             }
-            Button("Delete Recording…", action: requestDeletion)
+            if !item.isMissing {
+                Button("Delete Recording…", action: requestDeletion)
+            }
         }
     }
 
     private var name: some View {
-        HStack(spacing: 6) {
-            Text(item.title)
-                .font(.system(size: 13, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
-            if item.hasTranscript {
-                IconView(.file, size: 12)
-                    .foregroundStyle(VerbatimColor.tertiaryText)
-                    .help("Transcript available")
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 6) {
+                Text(item.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if item.hasTranscript {
+                    IconView(.file, size: 12)
+                        .foregroundStyle(VerbatimColor.tertiaryText)
+                        .help("Transcript available")
+                }
             }
+            Text(item.kindLabel)
+                .font(.system(size: 11))
+                .foregroundStyle(VerbatimColor.secondaryText)
+                .lineLimit(1)
         }
     }
 
@@ -92,6 +102,7 @@ struct LibraryRecordingRow: View {
     private var accessibilityLabel: String {
         var parts = [
             item.title,
+            item.kindLabel,
             LibraryFormat.recordedDate(item.recordedAt),
             Duration.seconds(item.duration).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide)),
             LibraryFormat.size(item.sizeBytes),
@@ -117,7 +128,7 @@ private struct RecordingStatusView: View {
                 Text(item.status.label)
                     .foregroundStyle(item.status.labelColor)
                     .lineLimit(1)
-                if let actionTitle = item.status.actionTitle {
+                if let actionTitle = item.statusActionTitle {
                     Button(actionTitle, action: performAction)
                         .buttonStyle(.verbatim(.secondary, size: .small))
                         .fixedSize()
@@ -150,40 +161,69 @@ private struct ProgressBar: View {
     }
 }
 
-/// A 52 × 32 pt preview: a stylized screen for screen recordings, a waveform glyph for audio.
+/// A 52 × 32 pt preview: a still from the video once one has loaded, otherwise a stylized screen for video recordings
+/// and a waveform glyph for audio. Loading starts when a row scrolls into view and is cancelled when it leaves.
 struct RecordingThumbnail: View {
     let kind: LibraryItem.Kind
+    var isUnavailable = false
+    var load: () async -> Data? = { nil }
+
+    @State private var image: NSImage?
 
     var body: some View {
         Group {
-            switch kind {
-            case .screen:
-                ZStack(alignment: .topLeading) {
-                    VerbatimColor.thumbnail
-                    VerbatimColor.thumbnailBar
-                        .frame(height: 4)
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(VerbatimColor.thumbnailWindow)
-                        .frame(width: 24, height: 17)
-                        .offset(x: 6, y: 8)
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(VerbatimColor.thumbnailWindowAlternate)
-                        .frame(width: 22, height: 15)
-                        .offset(x: 24, y: 12)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 5))
-                .hairlineBorder(cornerRadius: 5)
-            case .audio:
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(VerbatimColor.fill)
-                    .overlay {
-                        IconView(.audio, size: 16)
-                            .foregroundStyle(VerbatimColor.accent)
-                    }
+            if let image, !isUnavailable {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 52, height: 32)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .hairlineBorder(cornerRadius: 5)
+            } else {
+                fallback
             }
         }
         .frame(width: 52, height: 32)
         .accessibilityHidden(true)
+        .task(id: isUnavailable) {
+            guard kind != .audio, !isUnavailable, image == nil else {
+                return
+            }
+            let data = await load()
+            guard !Task.isCancelled, let data else {
+                return
+            }
+            image = NSImage(data: data)
+        }
+    }
+
+    @ViewBuilder
+    private var fallback: some View {
+        switch kind {
+        case .screen, .window:
+            ZStack(alignment: .topLeading) {
+                VerbatimColor.thumbnail
+                VerbatimColor.thumbnailBar
+                    .frame(height: 4)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(VerbatimColor.thumbnailWindow)
+                    .frame(width: 24, height: 17)
+                    .offset(x: 6, y: 8)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(VerbatimColor.thumbnailWindowAlternate)
+                    .frame(width: 22, height: 15)
+                    .offset(x: 24, y: 12)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .hairlineBorder(cornerRadius: 5)
+        case .audio:
+            RoundedRectangle(cornerRadius: 5)
+                .fill(VerbatimColor.fill)
+                .overlay {
+                    IconView(.audio, size: 16)
+                        .foregroundStyle(VerbatimColor.accent)
+                }
+        }
     }
 }
 

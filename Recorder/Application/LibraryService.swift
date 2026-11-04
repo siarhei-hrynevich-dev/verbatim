@@ -1,0 +1,183 @@
+import Foundation
+import Observation
+import os
+
+/// The recording library's use cases and the rules connecting its database entries to the files they describe.
+///
+/// Created by App and independent of any window. Every operation that changes the library advances `revision`, which
+/// is how the Library window knows to reload without polling. Database and file work happens on the injected actors,
+/// never on the main actor.
+@MainActor
+@Observable
+final class LibraryService: FinishedRecordingRegistry {
+    /// Advances whenever the library's contents change.
+    private(set) var revision = 0
+
+    @ObservationIgnored private let repository: any RecordingRepository
+    @ObservationIgnored private let fileStore: any RecordingFileStore
+    @ObservationIgnored private let thumbnails: any RecordingThumbnailProvider
+    @ObservationIgnored private let destinations: any RecordingDestinationStore
+
+    init(
+        repository: any RecordingRepository,
+        fileStore: any RecordingFileStore,
+        thumbnails: any RecordingThumbnailProvider,
+        destinations: any RecordingDestinationStore
+    ) {
+        self.repository = repository
+        self.fileStore = fileStore
+        self.thumbnails = thumbnails
+        self.destinations = destinations
+    }
+
+    // MARK: - Reading
+
+    func recordings(matching query: RecordingQuery) async throws -> [LibraryRecording] {
+        try await repository.fetch(matching: query)
+    }
+
+    func count(matching query: RecordingQuery) async throws -> Int {
+        try await repository.count(matching: query)
+    }
+
+    func totalFileSize() async throws -> Int64 {
+        try await repository.totalFileSize()
+    }
+
+    func recordingsFolder() async -> RecordingLocation {
+        await destinations.currentLocation()
+    }
+
+    /// Checks recordings against the file system. A file that was moved and found again through its bookmark gets
+    /// its stored reference updated; failing to store that only means finding it again next time.
+    func inspect(_ recordings: [LibraryRecording]) async -> [UUID: RecordingFileInspection] {
+        var inspections: [UUID: RecordingFileInspection] = [:]
+        for recording in recordings {
+            let inspection = await fileStore.inspect(recording)
+            inspections[recording.id] = inspection
+            guard inspection.media != recording.media else {
+                continue
+            }
+            var moved = recording
+            moved.media = inspection.media
+            do {
+                try await repository.update(moved)
+            } catch {
+                Self.logger.error("Could not store a moved file's location: \(String(describing: error))")
+            }
+        }
+        return inspections
+    }
+
+    func thumbnail(for recording: LibraryRecording) async -> Data? {
+        await thumbnails.thumbnail(for: recording)
+    }
+
+    // MARK: - Adding
+
+    /// The file is checked once more on its way in: only media that exists gets an entry. Failing here leaves the
+    /// media untouched.
+    func addFinishedRecording(_ metadata: RecordingMetadata, destination: RecordingDestination) async throws {
+        let snapshot = try await fileStore.describeMedia(at: destination.mediaURL)
+        let recording = LibraryRecording(
+            recording: metadata.recording,
+            captureMode: metadata.captureMode,
+            media: snapshot.media,
+            fileSizeBytes: snapshot.fileSizeBytes
+        )
+        try await repository.insert(recording)
+        revision += 1
+    }
+
+    // MARK: - Editing
+
+    /// Changes the title only; the file and folder keep their names, which keeps references to them stable.
+    func rename(_ id: UUID, to title: String) async throws {
+        let recording = try await existingRecording(id)
+        let renamed: Recording
+        do {
+            renamed = try recording.recording.renamed(to: title)
+        } catch {
+            throw LibraryError.invalidTitle
+        }
+        try await repository.updateTitle(id: id, title: renamed.title)
+        revision += 1
+    }
+
+    /// Repoints an existing entry at a file the user chose, after checking the file suits it. Never adds an entry.
+    func relocate(_ id: UUID, to url: URL) async throws {
+        var recording = try await existingRecording(id)
+        let snapshot = try await fileStore.validateReplacement(at: url, for: recording)
+        recording.media = snapshot.media
+        recording.fileSizeBytes = snapshot.fileSizeBytes
+        if let duration = snapshot.duration {
+            do {
+                recording.recording = try recording.recording.withDuration(duration)
+            } catch {
+                throw LibraryError.corruptedMedia
+            }
+        }
+        try await repository.update(recording)
+        await thumbnails.discardThumbnail(for: id)
+        revision += 1
+    }
+
+    // MARK: - Removing
+
+    /// Forgets the recording; its files stay exactly where they are. Returns the entry so it can be restored.
+    func removeFromLibrary(_ id: UUID) async throws -> LibraryRecording {
+        let recording = try await existingRecording(id)
+        try await repository.delete(id: id)
+        await thumbnails.discardThumbnail(for: id)
+        revision += 1
+        return recording
+    }
+
+    func restore(_ recording: LibraryRecording) async throws {
+        try await repository.insert(recording)
+        revision += 1
+    }
+
+    /// Moves the recording's files to the Trash, then removes its entry; if the files cannot be moved, the entry stays.
+    /// Returns the names of related files left behind.
+    func delete(_ id: UUID) async throws -> [String] {
+        let recording = try await existingRecording(id)
+        let filesLeftBehind = try await fileStore.moveToTrash(recording)
+        await thumbnails.discardThumbnail(for: id)
+        revision += 1
+        do {
+            try await repository.delete(id: id)
+        } catch {
+            Self.logger.error("A trashed recording's entry could not be removed: \(String(describing: error))")
+            throw LibraryError.entryKeptAfterTrash(detail: String(describing: error))
+        }
+        return filesLeftBehind
+    }
+
+    // MARK: - Finder
+
+    func open(_ id: UUID) async throws {
+        try await fileStore.open(existingRecording(id))
+    }
+
+    func reveal(_ id: UUID) async throws {
+        try await fileStore.reveal(existingRecording(id))
+    }
+
+    func openFolder(of id: UUID) async throws {
+        try await fileStore.openFolder(of: existingRecording(id))
+    }
+
+    func openRecordingsFolder() async throws {
+        try await fileStore.openFolder(at: destinations.currentLocation().url)
+    }
+
+    private func existingRecording(_ id: UUID) async throws -> LibraryRecording {
+        guard let recording = try await repository.fetch(id: id) else {
+            throw LibraryError.recordingNotFound
+        }
+        return recording
+    }
+
+    private static let logger = Logger(subsystem: "dev.local.Recorder", category: "Library")
+}
