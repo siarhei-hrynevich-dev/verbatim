@@ -1,6 +1,6 @@
 # Recorder
 
-A native Swift 6 / SwiftUI macOS screen recorder foundation. Initialization includes a normal Dock app with one placeholder window, validated recording metadata, and Swift Testing coverage. Capture, playback, library UI, transcription, embeddings, search, and processing workers are planned and are not implemented.
+A native Swift 6 / SwiftUI macOS screen recorder foundation. It includes a normal Dock app with the designed Recorder, Library, Viewer and Settings windows, Dock menu, menu bar recording indicator and app icon (layout only, with simulated state), validated recording metadata, and Swift Testing coverage. Capture, real playback, library storage, transcription, embeddings, search, and processing workers are planned and are not implemented.
 
 ## Requirements
 
@@ -12,7 +12,7 @@ Select your full Xcode installation using `xcode-select` if needed; accept its l
 
 ## Documentation before coding
 
-Before writing or changing code, read [AGENTS.md](AGENTS.md), this README, the [Software Architecture Guidelines](Docs/SOFTWARE_ARCHITECTURE_GUIDELINES.md), the [Project Architecture](Docs/ARCHITECTURE.md), and [Swift Code Style](Docs/CODE_STYLE.md). The guidelines define Lightweight Clean Architecture with MVVM; the project architecture records its application here and planned runtime behavior. Code style defines readability within individual files. Review relevant existing code and tests before implementation, and update documentation when behavior or architectural decisions change.
+Before writing or changing code, read [AGENTS.md](AGENTS.md), this README, the [Software Architecture Guidelines](Docs/SOFTWARE_ARCHITECTURE_GUIDELINES.md), the [Project Architecture](Docs/ARCHITECTURE.md), the [Implementation Status](Docs/IMPLEMENTATION.md), and [Swift Code Style](Docs/CODE_STYLE.md). The guidelines define Lightweight Clean Architecture with MVVM; the project architecture records its application here and planned runtime behavior. Code style defines readability within individual files. Review relevant existing code and tests before implementation, and update documentation when behavior or architectural decisions change.
 
 ## Development
 
@@ -44,13 +44,42 @@ Apple frameworks are supplied by the macOS SDK: ScreenCaptureKit, AVFoundation, 
 
 ## Organization
 
-- `Recorder/App`: minimal presentation.
+- `Recorder/Features/Recording`: the Recorder window (views, `RecorderViewModel`) and, under `Preview`, the sample data and scenarios that simulate its states.
+- `Recorder/Features/Library`: the Library window (views, `LibraryViewModel`) and, under `Preview`, its sample recordings, simulated search and scenarios.
+- `Recorder/Features/Viewer` and `Recorder/Features/Settings`: the Viewer and Settings windows, each with view models and `Preview` sample data and scenarios.
+- `Recorder/App`: AppKit integration and composition support: `AppDelegate` (Dock menu, quit confirmation, owner of the Recorder view model), `RecordingIndicators` (menu bar item and Dock badge while recording), `RecordingMenus`, `WindowNavigator` (opens SwiftUI windows from AppKit menus), and the Debug menu.
+- `Recorder/Shared`: design tokens (colors, icons, focus ring) and reusable components such as buttons, switches, segmented controls, callout banners and level meters.
 - `Recorder/Models`: value types and validation.
 - `Recorder/Resources`: asset catalog and future app resources.
 - `RecorderTests`: Swift Testing model and dependency smoke tests.
 - [Software Architecture Guidelines](Docs/SOFTWARE_ARCHITECTURE_GUIDELINES.md): layer responsibilities, dependency rules, MVVM, injection, state, concurrency, and testing.
-- [Architecture](Docs/ARCHITECTURE.md): current scaffold, planned layers and service boundaries, runtime constraints, permissions, and storage.
+- [Architecture](Docs/ARCHITECTURE.md): target layers and service boundaries, runtime constraints, permissions, and storage.
+- [Implementation Status](Docs/IMPLEMENTATION.md): what is implemented today and what is still simulated or missing.
 - [Swift Code Style](Docs/CODE_STYLE.md): file layout, naming, functions, control flow, comments, and review checklist.
 - [AGENTS.md](AGENTS.md): shared coding rules.
 
-Add feature directories for Presentation and Application, Domain, and Infrastructure directories when they contain real code. Recorder/Models currently holds the initial domain value type. The placeholder window intentionally has no final design or recording controls.
+Add feature directories for Presentation and Application, Domain, and Infrastructure directories when they contain real code. Recorder/Models currently holds the domain value types.
+
+## Recorder window preview states
+
+The Recorder window implements the “01 Recorder” design without capture: the timer, audio levels, window list, permissions and errors are simulated, the Library button opens the Library window and the gear opens Settings. Choose a state with the launch argument `-RecorderPreviewScenario <state>` (Xcode: Product › Scheme › Edit Scheme › Arguments), from **Debug › Recorder State** in Debug builds, or in the SwiftUI previews of `RecorderWindowView`. States: `idle`, `picker`, `recording`, `permission`, `mic`, `source`, `folder`, `disk`, `saved`. The window follows the system Light or Dark appearance and accent color.
+
+## Library window preview states
+
+The Library window implements the “02 Library” design without storage or processing: recordings, processing progress, search results, removal and deletion are simulated, Open Recording, Open Transcript and search moments open the Viewer, New Recording brings back the Recorder, and Finder actions are not connected yet. Choose a state with `-LibraryPreviewScenario <state>`, which also opens the window at launch, from **Debug › Library State** in Debug builds, or in the SwiftUI previews of `LibraryWindowView`. States: `list`, `processing`, `search`, `context`, `confirm`, `empty`. In the search field, try “maya”, “search” or “budget”.
+
+Both windows follow the system appearance and accent color. To review the design's accent tweak, pass `-VerbatimAccent blue|indigo|teal|graphite` or use **Debug › Accent Color**; **Debug › Appearance** switches Light and Dark.
+
+## Viewer window preview states
+
+The Viewer implements the “03 Viewer” design without media: playback, waveforms, transcript, search matches and processing are simulated. Choose a state with `-ViewerPreviewScenario <state>`, which also opens the window at launch, from **Debug › Viewer State**, or in the SwiftUI previews of `ViewerWindowView`. States: `video`, `search`, `audio`, `processing`, `failed`, `unprocessed`. Space plays or pauses, Left and Right skip 15 s, Return or ⌘G steps through transcript matches, and ⌘[ returns to the Library.
+
+## Dock and menu bar
+
+The app has the design's icon (“04 Dock”). Clicking the Dock icon brings back the Recorder, never the Library; only the Recorder opens at launch. The Dock menu offers New Recording, Open Recorder, Recordings Library and Settings…; while recording it starts with the live timer and offers Stop Recording, and the Dock icon gets a red badge. While recording, a menu bar item shows a red dot and the elapsed time, with Pause/Resume, Stop, Open Recorder and Recordings Library. Quitting during a recording asks first (Stop and Quit or Keep Recording). Try it with `-RecorderPreviewScenario recording` or **Debug › Recorder State › Recording**; on a notched display with a full menu bar, macOS may hide the item.
+
+## Settings window preview states
+
+The Settings window implements the “05 Settings” design in the native Settings scene (⌘, or the Recorder's gear) without real models, storage or updates: downloads, model preparation, index building and the update check are simulated while the window is open, and storage figures are sample data. No model is downloaded or loaded. Choose a state with `-SettingsPreviewScenario <state>`, which also opens Settings at launch, from **Debug › Settings State**, or in the SwiftUI previews of `SettingsWindowView`. States: `general`, `models`, `removeModel`, `storage`, `moveRecordings`, `about`, `licenses`.
+
+Keyboard: in the list, Up and Down move the selection, Return opens, Delete (or ⌘⌫) asks to delete, and Escape closes the actions menu. The menu takes focus when it opens (Up, Down, Return, Escape). Escape cancels the delete sheet, and Edit › Undo (⌘Z) restores a recording removed from the Library.

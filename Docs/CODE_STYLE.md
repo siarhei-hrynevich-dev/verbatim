@@ -5,7 +5,7 @@ These rules make an individual Swift file easy to scan, understand, and change. 
 ## Formatting and tooling
 
 - Use 4 spaces, no tabs, and a preferred line length of 120 characters.
-- Let Apple's `swift-format` control braces, whitespace, line wrapping, argument layout, trailing commas, and import ordering. Do not manually align declarations with extra spaces.
+- Let Apple's `swift-format` control braces, whitespace, line wrapping, argument layout, and import ordering. Multi-line collection literals have no trailing comma: swift-format is configured not to add one, matching SwiftLint's `trailing_comma` rule. Do not manually align declarations with extra spaces.
 - Keep opening braces on the declaration or control-flow line. Do not use semicolons to combine statements.
 - Separate declarations and distinct steps with a single blank line. Do not add empty lines between every statement.
 - Use the committed [.swift-format](../.swift-format) and [.swiftlint.yml](../.swiftlint.yml). Run `make format`, `make format-check`, and `make lint` for Swift changes.
