@@ -3,5 +3,6 @@
   "indentation": {"spaces": 4},
   "lineLength": 120,
   "lineBreakBeforeEachArgument": true,
+  "multiElementCollectionTrailingCommas": false,
   "rules": {"OrderedImports": true, "DoNotUseSemicolons": true}
 }
