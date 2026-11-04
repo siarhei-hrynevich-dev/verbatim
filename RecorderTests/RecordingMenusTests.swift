@@ -35,7 +35,7 @@ struct RecordingMenusTests {
         _ = stop.target?.perform(stop.action, with: stop)
 
         #expect(recorder.phase == .ready)
-        #expect(recorder.hasSavedRecording)
+        #expect(recorder.savedRecordingTitle != nil)
     }
 
     @Test func statusMenuDescribesSourceAndAudio() {

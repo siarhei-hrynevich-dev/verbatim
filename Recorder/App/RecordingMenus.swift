@@ -159,22 +159,14 @@ extension RecorderViewModel {
     /// `Recording · Built-in Display`, or `Paused · …`.
     var menuTitle: String {
         let state = activeClock?.isPaused == true ? String(localized: "Paused") : String(localized: "Recording")
-        return "\(state) · \(sourceName)"
+        return "\(state) · \(activeSourceName)"
     }
 
     /// `Microphone on · System audio on`.
     var menuDetail: String {
-        let microphone = isMicrophoneEnabled ? String(localized: "Microphone on") : String(localized: "Microphone off")
+        let microphone = isMicrophoneActive ? String(localized: "Microphone on") : String(localized: "Microphone off")
         let systemAudio =
-            isSystemAudioEnabled ? String(localized: "System audio on") : String(localized: "System audio off")
+            isSystemAudioActive ? String(localized: "System audio on") : String(localized: "System audio off")
         return "\(microphone) · \(systemAudio)"
-    }
-
-    private var sourceName: String {
-        switch captureMode {
-        case .screen: selectedDisplay?.name ?? String(localized: "Screen")
-        case .window: selectedWindow.map { "\($0.appName) — \($0.title)" } ?? String(localized: "Window")
-        case .audioOnly: String(localized: "Audio Only")
-        }
     }
 }

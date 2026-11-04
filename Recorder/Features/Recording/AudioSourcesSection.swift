@@ -3,6 +3,7 @@ import SwiftUI
 /// Microphone and System Audio rows of the Ready state, each with a live level meter and an on/off switch.
 struct AudioSourcesSection: View {
     @Bindable var viewModel: RecorderViewModel
+    @Bindable var selection: RecorderSourceSelection
 
     var body: some View {
         GroupedSection {
@@ -12,9 +13,10 @@ struct AudioSourcesSection: View {
                     .font(.system(size: 13))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 microphonePicker
-                SimulatedLevelMeter(
+                AudioSourceLevelMeter(
+                    viewModel: viewModel,
+                    source: .microphone,
                     isActive: viewModel.isMicrophoneEnabled,
-                    seed: 1,
                     accessibilityLabel: "Microphone level"
                 )
                 Toggle("Microphone", isOn: $viewModel.isMicrophoneEnabled)
@@ -32,9 +34,10 @@ struct AudioSourcesSection: View {
                 Text(viewModel.isSystemAudioEnabled ? "All apps" : "Off")
                     .font(.system(size: 12))
                     .foregroundStyle(VerbatimColor.secondaryText)
-                SimulatedLevelMeter(
+                AudioSourceLevelMeter(
+                    viewModel: viewModel,
+                    source: .systemAudio,
                     isActive: viewModel.isSystemAudioEnabled,
-                    seed: 4,
                     accessibilityLabel: "System audio activity"
                 )
                 Toggle("System audio", isOn: $viewModel.isSystemAudioEnabled)
@@ -46,16 +49,16 @@ struct AudioSourcesSection: View {
 
     private var microphonePicker: some View {
         Menu {
-            Picker("Input device", selection: $viewModel.selectedMicrophone) {
-                ForEach(viewModel.sources.microphones, id: \.self) { microphone in
-                    Text(microphone).tag(microphone)
+            Picker("Input device", selection: $selection.selectedMicrophoneID) {
+                ForEach(selection.microphones) { microphone in
+                    Text(microphone.name).tag(Microphone.ID?.some(microphone.id))
                 }
             }
             .pickerStyle(.inline)
             .labelsHidden()
         } label: {
             HStack(spacing: 6) {
-                Text(viewModel.selectedMicrophone)
+                Text(viewModel.selectedMicrophone?.name ?? String(localized: "No Input"))
                 IconView(.chevronDown, size: 10)
             }
         }
@@ -65,7 +68,7 @@ struct AudioSourcesSection: View {
         .fixedSize()
         .opacity(viewModel.isMicrophoneEnabled ? 1 : 0.4)
         .accessibilityLabel("Input device")
-        .accessibilityValue(viewModel.selectedMicrophone)
+        .accessibilityValue(viewModel.selectedMicrophone?.name ?? String(localized: "No Input"))
     }
 }
 

@@ -1,11 +1,10 @@
 import Foundation
 
-/// Fixed sample content for the layout-only Recorder. Capture, permissions, storage and processing are not
-/// implemented yet; this stands in for what those services will provide.
+/// Fixed sample content for design-review scenarios and SwiftUI previews. Real recordings never use it.
 struct RecorderPreviewData: Sendable {
     let displays: [CaptureDisplay]
     let windows: [CaptureWindow]
-    let microphones: [String]
+    let microphones: [Microphone]
     let storageSummary: String
     let recordingsFolderPath: String
     let savedRecordingTitle: String
@@ -24,7 +23,7 @@ struct RecorderPreviewData: Sendable {
             CaptureWindow(id: "notes", appName: "Notes", title: "Architecture agenda"),
             CaptureWindow(id: "terminal", appName: "Terminal", title: "zsh — 120×40")
         ],
-        microphones: ["MacBook Pro Microphone"],
+        microphones: [Microphone(id: "built-in-mic", name: "MacBook Pro Microphone")],
         storageSummary: "~/Movies/Verbatim · 214 GB free",
         recordingsFolderPath: "~/Movies/Verbatim",
         savedRecordingTitle: "Recording Nov 3, 11:42",

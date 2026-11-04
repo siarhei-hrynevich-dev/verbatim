@@ -3,6 +3,7 @@ import Testing
 
 @testable import Recorder
 
+/// Design-review scenarios, which show states without touching capture.
 @MainActor
 struct RecorderViewModelTests {
     private let start = Date(timeIntervalSinceReferenceDate: 1_000)
@@ -80,7 +81,7 @@ struct RecorderViewModelTests {
 
         viewModel.stopRecording()
         #expect(viewModel.phase == .ready)
-        #expect(viewModel.hasSavedRecording)
+        #expect(viewModel.savedRecordingTitle != nil)
     }
 
     @Test func recordingScenarioShowsTheDesignElapsedTime() {
@@ -129,5 +130,8 @@ struct RecorderPreviewScenarioTests {
 
         defaults.set("unknown", forKey: RecorderPreviewScenario.launchArgumentKey)
         #expect(RecorderPreviewScenario.fromLaunchArguments(defaults) == .idle)
+
+        defaults.removeObject(forKey: RecorderPreviewScenario.launchArgumentKey)
+        #expect(RecorderPreviewScenario.fromLaunchArguments(defaults) == nil)
     }
 }

@@ -8,13 +8,13 @@ Presentation depends on Application and Domain; Application depends on Domain. I
 
 ## Current state
 
-What exists in the code today (windows, simulated state, App integration, models, tests) is described in [Implementation Status](IMPLEMENTATION.md). This document describes the target architecture; sections marked "planned" are intended future behavior, not current behavior.
+What exists in the code today (recording, windows, simulated state, App integration, models, tests) is described in [Implementation Status](IMPLEMENTATION.md). This document describes the target architecture; sections marked "planned" are intended future behavior, not current behavior. Recording capture, its lifecycle and media finalization are implemented; processing and SQLite persistence are not.
 
 ## Feature and service boundaries (planned)
 
 Organize presentation under `Features/Recording`, `Features/Library`, `Features/Player`, and `Features/Settings` as each feature is built. Use layer-based `Application`, `Domain`, and `Infrastructure` directories for the core and adapters. Keep composition and lifecycle integration in App and truly reused views/extensions in Shared. Avoid empty placeholder files and speculative abstractions.
 
-The current `Recorder/Models` types (`Recording`, capture source vocabulary) belong logically to Domain; their location remains valid for the scaffold. When capture is implemented, `RecorderViewModel` should receive capture, permission and storage state through injected Application services instead of `RecorderPreviewData`. Move relevant files when real feature work makes it useful, updating Xcode target membership; no immediate restructuring is required. New workflow code belongs in Application and framework adapters in Infrastructure rather than a generic Services directory. Application-wide dependencies are created in App and injected explicitly.
+The `Recorder/Models` types belong logically to Domain; that location remains valid. `RecorderViewModel` receives capture, permission and storage state through injected Application contracts. Move relevant files when real feature work makes it useful, updating Xcode target membership; no immediate restructuring is required. New workflow code belongs in Application and framework adapters in Infrastructure rather than a generic Services directory. Application-wide dependencies are created in App and injected explicitly.
 
 Use `@MainActor @Observable` ViewModels for nontrivial presentation state and asynchronous application actions. Simple views can receive values and callbacks directly. Views and ViewModels must not instantiate infrastructure or own workflows that must survive window closure.
 
@@ -22,7 +22,9 @@ Services will own these responsibilities:
 
 | Component | Responsibility |
 | --- | --- |
-| CaptureService | Infrastructure adapter: ScreenCaptureKit session, screen/window/system audio and microphone capture, media finalization |
+| RecordingCoordinator | Application workflow (implemented): the recording lifecycle and the single source of truth for an active recording |
+| Capture (`ScreenCaptureEngine`, `CaptureSourceDiscovery`) | Infrastructure adapters (implemented): source discovery, ScreenCaptureKit and microphone capture, media finalization |
+| RecordingRepository | Application contract (implemented with a JSON sidecar in `FileRecordingStore`): recording metadata; PersistenceService will implement it with SQLite |
 | TranscriptionService | Infrastructure adapter: on-demand offline WhisperKit processing and timestamped transcript segments |
 | EmbeddingService | Infrastructure adapter: on-demand Core ML inference, model load/unload, replaceable embedding implementation |
 | PersistenceService | Infrastructure implementation: SQLite metadata, file references, transcript segments, FTS5 and sqlite-vec indexes |
@@ -58,8 +60,8 @@ Use async/await, structured tasks and task groups where appropriate. Actors own 
 
 ## Lifecycle and native interaction (planned)
 
-Keep SwiftUI App lifecycle and a regular Dock application. Add an AppKit delegate only where native integration requires it. Dock activation reopens the Recorder window; the Dock menu, menu bar item and quit confirmation should be driven by real recording state once capture exists. Recording must continue with closed windows, which depends on real capture and belongs to later work. Do not introduce LSUIElement agent mode or custom Dock UI.
+Keep SwiftUI App lifecycle and a regular Dock application. Add an AppKit delegate only where native integration requires it. Dock activation reopens the Recorder window; the Dock menu, menu bar item and quit confirmation are driven by the real recording state, and recording continues with closed windows. Do not introduce LSUIElement agent mode or custom Dock UI.
 
 ## Sandbox and contextual permissions
 
-App Sandbox is enabled. Audio-input and user-selected read/write entitlements prepare for microphone and folder access; the microphone usage description is present. These entitlements do not grant Screen Recording authorization. Screen and system audio capture authorization must be handled through macOS capture APIs. Microphone authorization is separate. Request each permission when the corresponding feature is used, never all at startup. Persist folder access with security-scoped bookmarks, balance access start/stop, and handle stale bookmarks and denied or revoked permissions. Do not disable the sandbox to bypass permissions. A signed app will be needed to validate sandbox/TCC behavior when capture is implemented; unsigned build verification does not validate permissions.
+App Sandbox is enabled. Audio-input, Movies folder, user-selected read/write and app-scoped bookmark entitlements cover the microphone and recording folders; the microphone usage description is present. These entitlements do not grant Screen Recording authorization. Screen and system audio capture authorization must be handled through macOS capture APIs. Microphone authorization is separate. Request each permission when the corresponding feature is used, never all at startup. Persist folder access with security-scoped bookmarks, balance access start/stop, and handle stale bookmarks and denied or revoked permissions. Do not disable the sandbox to bypass permissions. A signed app is needed to validate sandbox/TCC behavior; unsigned build verification does not validate permissions.

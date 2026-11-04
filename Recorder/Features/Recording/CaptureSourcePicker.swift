@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Shows the choices for the selected capture mode: display thumbnails, window thumbnails, or an Audio Only note.
@@ -18,10 +19,10 @@ struct CaptureSourcePicker: View {
 
     private var displayGrid: some View {
         HStack(alignment: .top, spacing: 14) {
-            ForEach(viewModel.sources.displays) { display in
-                let isSelected = display.id == viewModel.selectedDisplayID
+            ForEach(viewModel.selection.displays) { display in
+                let isSelected = display.id == viewModel.selectedDisplay?.id
                 Button {
-                    viewModel.selectedDisplayID = display.id
+                    viewModel.selection.selectedDisplayID = display.id
                 } label: {
                     VStack(spacing: 6) {
                         DisplayThumbnail(isSelected: isSelected)
@@ -44,18 +45,39 @@ struct CaptureSourcePicker: View {
         .accessibilityLabel("Displays")
     }
 
+    /// Two rows fit without scrolling, as in the design; more windows scroll within the same height.
+    @ViewBuilder
     private var windowGrid: some View {
+        if viewModel.selection.windows.isEmpty {
+            note(icon: .window, "No windows are available to record. Open a window, or record the entire screen.")
+        } else if viewModel.selection.windows.count > Self.windowsWithoutScrolling {
+            ScrollView {
+                windowTiles
+                    .padding(Self.selectionRingOutset)
+            }
+            .padding(-Self.selectionRingOutset)
+            .frame(height: Self.scrollingGridHeight)
+        } else {
+            windowTiles
+        }
+    }
+
+    private var windowTiles: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
-            ForEach(viewModel.sources.windows) { window in
-                let isSelected = window.id == viewModel.selectedWindowID
+            ForEach(viewModel.selection.windows) { window in
+                let isSelected = window.id == viewModel.selection.selectedWindowID
                 Button {
-                    viewModel.selectedWindowID = window.id
+                    viewModel.selection.selectedWindowID = window.id
                 } label: {
                     VStack(spacing: 5) {
-                        WindowThumbnail(isSelected: isSelected)
+                        WindowThumbnail(
+                            imageData: viewModel.selection.windowThumbnails[window.id],
+                            isSelected: isSelected
+                        )
                         VStack(spacing: 0) {
                             Text(window.appName)
                                 .fontWeight(isSelected ? .semibold : .medium)
+                                .lineLimit(1)
                             Text(window.title)
                                 .foregroundStyle(VerbatimColor.secondaryText)
                                 .lineLimit(1)
@@ -74,17 +96,22 @@ struct CaptureSourcePicker: View {
     }
 
     private var audioOnlyNote: some View {
+        note(
+            icon: .audio,
+            """
+            No video is captured. Microphone and system audio are saved as separate tracks, so the transcript \
+            can label who spoke.
+            """
+        )
+    }
+
+    private func note(icon: VerbatimIcon, _ text: LocalizedStringKey) -> some View {
         HStack(spacing: 10) {
-            IconView(.audio, size: 18)
+            IconView(icon, size: 18)
                 .foregroundStyle(VerbatimColor.accent)
-            Text(
-                """
-                No video is captured. Microphone and system audio are saved as separate tracks, so the transcript \
-                can label who spoke.
-                """
-            )
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.system(size: 12))
         .lineSpacing(1.5)
@@ -92,6 +119,12 @@ struct CaptureSourcePicker: View {
         .padding(14)
         .groupedBackground()
     }
+
+    private static let windowsWithoutScrolling = 6
+    /// Keeps the selection ring, which is drawn outside a tile, from being clipped by the scroll view.
+    private static let selectionRingOutset: CGFloat = 4
+    /// Two rows of tiles and the space between them.
+    private static let scrollingGridHeight: CGFloat = 190
 }
 
 /// A stylized display preview: a menu bar strip with two overlapping windows.
@@ -121,29 +154,45 @@ private struct DisplayThumbnail: View {
     }
 }
 
-/// A stylized window preview: a title bar strip with two text lines.
+/// A window's real thumbnail when one is available, otherwise a stylized preview: a title bar strip with two text
+/// lines.
 private struct WindowThumbnail: View {
+    let imageData: Data?
     let isSelected: Bool
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack(alignment: .topLeading) {
-                VerbatimColor.thumbnailWindow
-                VerbatimColor.thumbnailBar
-                    .frame(height: 8)
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(VerbatimColor.thumbnail)
-                    .frame(width: proxy.size.width * 0.4, height: 4)
-                    .offset(x: 8, y: 16)
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(VerbatimColor.thumbnailWindowAlternate)
-                    .frame(width: proxy.size.width * 0.6, height: 4)
-                    .offset(x: 8, y: 25)
+            if let imageData, let image = NSImage(data: imageData) {
+                ZStack {
+                    VerbatimColor.thumbnail
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                }
+                .accessibilityHidden(true)
+            } else {
+                placeholder(width: proxy.size.width)
             }
         }
         .frame(height: 50)
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .selectionRing(isSelected: isSelected, cornerRadius: 6)
+    }
+
+    private func placeholder(width: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            VerbatimColor.thumbnailWindow
+            VerbatimColor.thumbnailBar
+                .frame(height: 8)
+            RoundedRectangle(cornerRadius: 2)
+                .fill(VerbatimColor.thumbnail)
+                .frame(width: width * 0.4, height: 4)
+                .offset(x: 8, y: 16)
+            RoundedRectangle(cornerRadius: 2)
+                .fill(VerbatimColor.thumbnailWindowAlternate)
+                .frame(width: width * 0.6, height: 4)
+                .offset(x: 8, y: 25)
+        }
     }
 }
 

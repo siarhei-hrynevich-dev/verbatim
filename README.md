@@ -1,6 +1,6 @@
 # Recorder
 
-A native Swift 6 / SwiftUI macOS screen recorder foundation. It includes a normal Dock app with the designed Recorder, Library, Viewer and Settings windows, Dock menu, menu bar recording indicator and app icon (layout only, with simulated state), validated recording metadata, and Swift Testing coverage. Capture, real playback, library storage, transcription, embeddings, search, and processing workers are planned and are not implemented.
+A native Swift 6 / SwiftUI macOS screen recorder. The Recorder window records screens, windows and audio with ScreenCaptureKit and AVFoundation, keeping microphone and system audio as separate tracks. The app also has the designed Library, Viewer and Settings windows (layout only, with simulated state), a Dock menu, menu bar recording indicator and app icon, and Swift Testing coverage. Real playback, a recordings library, transcription, embeddings, search, and processing workers are planned and are not implemented.
 
 ## Requirements
 
@@ -44,10 +44,12 @@ Apple frameworks are supplied by the macOS SDK: ScreenCaptureKit, AVFoundation, 
 
 ## Organization
 
-- `Recorder/Features/Recording`: the Recorder window (views, `RecorderViewModel`) and, under `Preview`, the sample data and scenarios that simulate its states.
+- `Recorder/Features/Recording`: the Recorder window (views, `RecorderViewModel`) and, under `Preview`, the sample data and scenarios for reviewing its design states.
+- `Recorder/Application`: `RecordingCoordinator`, which owns the recording lifecycle, and the contracts Infrastructure implements.
+- `Recorder/Infrastructure`: capture and media output, recording files and metadata, preferences, permissions.
 - `Recorder/Features/Library`: the Library window (views, `LibraryViewModel`) and, under `Preview`, its sample recordings, simulated search and scenarios.
 - `Recorder/Features/Viewer` and `Recorder/Features/Settings`: the Viewer and Settings windows, each with view models and `Preview` sample data and scenarios.
-- `Recorder/App`: AppKit integration and composition support: `AppDelegate` (Dock menu, quit confirmation, owner of the Recorder view model), `RecordingIndicators` (menu bar item and Dock badge while recording), `RecordingMenus`, `WindowNavigator` (opens SwiftUI windows from AppKit menus), and the Debug menu.
+- `Recorder/App`: the composition root (`AppComposition`) and AppKit integration: `AppDelegate` (Dock menu, quit confirmation, holder of the Recorder view model), `RecordingIndicators` (menu bar item and Dock badge while recording), `RecordingMenus`, `WindowNavigator` (opens SwiftUI windows from AppKit menus), and the Debug menu.
 - `Recorder/Shared`: design tokens (colors, icons, focus ring) and reusable components such as buttons, switches, segmented controls, callout banners and level meters.
 - `Recorder/Models`: value types and validation.
 - `Recorder/Resources`: asset catalog and future app resources.
@@ -58,11 +60,17 @@ Apple frameworks are supplied by the macOS SDK: ScreenCaptureKit, AVFoundation, 
 - [Swift Code Style](Docs/CODE_STYLE.md): file layout, naming, functions, control flow, comments, and review checklist.
 - [AGENTS.md](AGENTS.md): shared coding rules.
 
-Add feature directories for Presentation and Application, Domain, and Infrastructure directories when they contain real code. Recorder/Models currently holds the domain value types.
+Add directories only when they contain real code. Recorder/Models holds the Domain types.
 
-## Recorder window preview states
+## Recording
 
-The Recorder window implements the “01 Recorder” design without capture: the timer, audio levels, window list, permissions and errors are simulated, the Library button opens the Library window and the gear opens Settings. Choose a state with the launch argument `-RecorderPreviewScenario <state>` (Xcode: Product › Scheme › Edit Scheme › Arguments), from **Debug › Recorder State** in Debug builds, or in the SwiftUI previews of `RecorderWindowView`. States: `idle`, `picker`, `recording`, `permission`, `mic`, `source`, `folder`, `disk`, `saved`. The window follows the system Light or Dark appearance and accent color.
+Recordings go to `~/Movies/Verbatim` by default, one folder per recording: `2026-11-04_120000_<uuid>/recording.mov` and `recording.json`. Click the folder line at the bottom of the Recorder to open it in Finder, or right-click it to choose another folder. macOS asks for Screen Recording and Microphone access when a recording first needs them. To test permissions, run a build signed with your own development team; the unsigned builds from `make build` do not exercise the sandbox.
+
+Details are in [Implementation Status](Docs/IMPLEMENTATION.md).
+
+## Recorder window design states
+
+The Recorder's “01 Recorder” design states can be reviewed with sample data and no capture. Choose a state with the launch argument `-RecorderPreviewScenario <state>` (Xcode: Product › Scheme › Edit Scheme › Arguments), from **Debug › Recorder State** in Debug builds, or in the SwiftUI previews of `RecorderWindowView`. **Debug › Recorder State › Live** returns to real capture. States: `idle`, `picker`, `recording`, `permission`, `mic`, `source`, `folder`, `disk`, `saved`. The window follows the system Light or Dark appearance and accent color.
 
 ## Library window preview states
 
@@ -76,7 +84,7 @@ The Viewer implements the “03 Viewer” design without media: playback, wavefo
 
 ## Dock and menu bar
 
-The app has the design's icon (“04 Dock”). Clicking the Dock icon brings back the Recorder, never the Library; only the Recorder opens at launch. The Dock menu offers New Recording, Open Recorder, Recordings Library and Settings…; while recording it starts with the live timer and offers Stop Recording, and the Dock icon gets a red badge. While recording, a menu bar item shows a red dot and the elapsed time, with Pause/Resume, Stop, Open Recorder and Recordings Library. Quitting during a recording asks first (Stop and Quit or Keep Recording). Try it with `-RecorderPreviewScenario recording` or **Debug › Recorder State › Recording**; on a notched display with a full menu bar, macOS may hide the item.
+The app has the design's icon (“04 Dock”). Clicking the Dock icon brings back the Recorder, never the Library; only the Recorder opens at launch. The Dock menu offers New Recording, Open Recorder, Recordings Library and Settings…; while recording it starts with the live timer and offers Stop Recording, and the Dock icon gets a red badge. While recording, a menu bar item shows a red dot and the elapsed time, with Pause/Resume, Stop, Open Recorder and Recordings Library. Quitting during a recording asks first (Stop and Quit or Keep Recording), and Stop and Quit waits until the file is finished. Try the look with `-RecorderPreviewScenario recording` or **Debug › Recorder State › Recording**; on a notched display with a full menu bar, macOS may hide the item.
 
 ## Settings window preview states
 

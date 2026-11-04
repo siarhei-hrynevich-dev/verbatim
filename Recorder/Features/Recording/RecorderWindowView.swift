@@ -24,9 +24,9 @@ struct RecorderWindowView: View {
     @ViewBuilder
     private var content: some View {
         switch viewModel.phase {
-        case .ready:
+        case .ready, .preparing:
             RecorderSetupView(viewModel: viewModel, showLibrary: openLibrary)
-        case .recording(let clock):
+        case .recording(let clock), .finishing(let clock):
             ActiveRecordingView(viewModel: viewModel, clock: clock)
         }
     }
@@ -91,15 +91,17 @@ extension RecorderViewModel.Status {
         switch self {
         case .ready: "Ready"
         case .needsAttention: "Needs Attention"
+        case .preparing: "Preparing"
         case .recording: "Recording"
         case .paused: "Paused"
+        case .finishing: "Saving"
         }
     }
 
     var dotColor: Color {
         switch self {
         case .ready: VerbatimColor.green
-        case .needsAttention, .paused: VerbatimColor.orange
+        case .needsAttention, .paused, .preparing, .finishing: VerbatimColor.orange
         case .recording: VerbatimColor.red
         }
     }

@@ -17,6 +17,9 @@
         var body: some Commands {
             CommandMenu("Debug") {
                 Menu("Recorder State") {
+                    Button("Live") {
+                        recorderViewModel.endPreview()
+                    }
                     ForEach(RecorderPreviewScenario.allCases) { scenario in
                         Button(scenario.title) {
                             recorderViewModel.apply(scenario)

@@ -1,83 +1,178 @@
 import Foundation
 import Observation
+import os
 
-/// Presentation state of the Recorder window.
-///
-/// This is a layout-only implementation: starting, pausing and stopping only change local state, and issue
-/// actions simulate their fix or fallback. No capture, permission, storage or processing service is involved yet.
+/// Presentation state of the Recorder window: the settings being edited and how the coordinator's recording state
+/// reads on screen. The recording itself belongs to `RecordingCoordinator`, so it continues without this window.
 @MainActor
 @Observable
 final class RecorderViewModel {
     enum Phase: Equatable {
         case ready
+        case preparing
         case recording(RecordingClock)
+        case finishing(RecordingClock)
     }
 
     enum Status {
         case ready
         case needsAttention
+        case preparing
         case recording
         case paused
+        case finishing
     }
 
-    let sources: RecorderPreviewData
+    /// The services the Recorder window works with, created by the composition root.
+    struct Dependencies {
+        let coordinator: RecordingCoordinator
+        let sourceProvider: any CaptureSourceProviding
+        let levelPreviewEngine: any CaptureEngine
+        let permissions: any CapturePermissions
+        let storage: any RecordingDestinationStore
+        let preferencesStore: any RecordingPreferencesStore
+        let systemActions: any SystemActions
+    }
 
-    private(set) var phase: Phase = .ready
-    private(set) var issue: RecorderIssue?
-    private(set) var hasSavedRecording = false
+    /// Set by design-review scenarios; never during real capture.
+    var preview = RecorderPreviewState()
 
-    var captureMode: CaptureMode = .screen
-    var selectedDisplayID: CaptureDisplay.ID
-    var selectedWindowID: CaptureWindow.ID
-    var selectedMicrophone: String
-    var isMicrophoneEnabled = true
-    var isSystemAudioEnabled = true
-    var quality: VideoQuality = .hd1080
-    var frameRate: FrameRate = .fps60
-    var transcribesWhenFinished = true
+    let selection: RecorderSourceSelection
+    let levelPreview: LevelPreviewController
 
-    init(sources: RecorderPreviewData = .sample, scenario: RecorderPreviewScenario = .idle) {
-        self.sources = sources
-        selectedDisplayID = sources.displays.first?.id ?? ""
-        selectedWindowID = sources.windows.first?.id ?? ""
-        selectedMicrophone = sources.microphones.first ?? ""
-        apply(scenario)
+    private(set) var location: RecordingLocation?
+    /// A problem from a user action outside a recording, such as a folder that could not be used.
+    var actionIssue: RecorderIssue?
+    var sourceDiscoveryIssue: RecorderIssue?
+    var hasLoadedSources = false
+    /// macOS only answers this when asked, so it is kept here for the callout to update when it changes.
+    var isMicrophoneAccessDenied = false
+    var isChoosingFolder = false
+
+    var captureMode: CaptureMode { didSet { settingsDidChange(reloadsSources: true) } }
+    var isMicrophoneEnabled: Bool { didSet { microphoneEnabledDidChange() } }
+    var isSystemAudioEnabled: Bool { didSet { settingsDidChange() } }
+    var quality: VideoQuality { didSet { savePreferences() } }
+    var frameRate: FrameRate { didSet { savePreferences() } }
+    var transcribesWhenFinished: Bool { didSet { savePreferences() } }
+
+    @ObservationIgnored let dependencies: Dependencies
+    /// Refreshes sources while the setup screen is on-screen. Cancelled when it goes away.
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    @ObservationIgnored var isSetupVisible = false
+
+    init(dependencies: Dependencies) {
+        self.dependencies = dependencies
+        let preferences = dependencies.preferencesStore.load()
+        selection = RecorderSourceSelection(preferences: preferences)
+        levelPreview = LevelPreviewController(engine: dependencies.levelPreviewEngine)
+        captureMode = preferences.captureMode
+        isMicrophoneEnabled = preferences.isMicrophoneEnabled
+        isSystemAudioEnabled = preferences.isSystemAudioEnabled
+        quality = preferences.quality
+        frameRate = preferences.frameRate
+        transcribesWhenFinished = preferences.transcribesWhenFinished
+        selection.onUserSelection = { [weak self] in
+            self?.settingsDidChange()
+        }
+    }
+
+    var coordinator: RecordingCoordinator {
+        dependencies.coordinator
+    }
+
+    // MARK: - State
+
+    var phase: Phase {
+        if let previewPhase = preview.phase {
+            return previewPhase
+        }
+        switch coordinator.state {
+        case .idle, .failed: return .ready
+        case .preparing: return .preparing
+        case .recording(let clock): return .recording(clock)
+        case .stopping(let clock), .finalizing(let clock): return .finishing(clock)
+        }
     }
 
     var status: Status {
-        if case .recording(let clock) = phase {
-            return clock.isPaused ? .paused : .recording
+        switch phase {
+        case .ready: issue == nil ? .ready : .needsAttention
+        case .preparing: .preparing
+        case .recording(let clock): clock.isPaused ? .paused : .recording
+        case .finishing: .finishing
         }
-        return issue == nil ? .ready : .needsAttention
     }
 
     var canStartRecording: Bool {
-        guard let issue, issue.blocksVideoCapture else {
-            return true
+        guard phase == .ready else {
+            return false
         }
-        return !captureMode.capturesVideo
+        let requiresScreenCapture = captureMode.capturesVideo || isSystemAudioEnabled
+        return !(issue?.blocksStart(requiresScreenCapture: requiresScreenCapture) ?? false)
     }
 
     var selectedDisplay: CaptureDisplay? {
-        sources.displays.first { $0.id == selectedDisplayID }
+        selection.selectedDisplay
     }
 
     var selectedWindow: CaptureWindow? {
-        sources.windows.first { $0.id == selectedWindowID }
+        selection.selectedWindow
+    }
+
+    var selectedMicrophone: Microphone? {
+        selection.selectedMicrophone
+    }
+
+    var savedRecordingTitle: String? {
+        preview.savedRecordingTitle ?? coordinator.lastOutcome?.metadata.recording.title
+    }
+
+    var isCaptureBusy: Bool {
+        coordinator.state.isBusy
+    }
+
+    func litSegments(for source: AudioSourceKind) -> Int {
+        let levels = coordinator.activeRecording == nil ? levelPreview.levels : coordinator.levels
+        let level = source == .microphone ? levels.microphone : levels.systemAudio
+        return Int((level * Double(LevelMeter.segmentCount)).rounded())
+    }
+
+    /// `~/Movies/Verbatim · 214 GB free`.
+    var storageSummary: String {
+        if let summary = preview.storageSummary {
+            return summary
+        }
+        guard let location else {
+            return ""
+        }
+        let free = RecorderIssue.formattedBytes(location.availableBytes)
+        return String(localized: "\(location.displayPath) · \(free) free")
+    }
+
+    var recordingsFolderPath: String {
+        preview.storageSummary == nil ? location?.displayPath ?? "" : RecorderPreviewData.sample.recordingsFolderPath
     }
 
     // MARK: - Recording
 
     func startRecording(at date: Date = .now) {
-        guard phase == .ready, canStartRecording else {
+        guard canStartRecording else {
             return
         }
-        hasSavedRecording = false
-        phase = .recording(RecordingClock(startedAt: date))
+        if preview.isActive {
+            preview.savedRecordingTitle = nil
+            preview.phase = .recording(RecordingClock(startedAt: date))
+            return
+        }
+        actionIssue = nil
+        levelPreview.stop()
+        coordinator.requestStart(makeConfiguration())
     }
 
     func togglePause(at date: Date = .now) {
-        guard case .recording(var clock) = phase else {
+        guard case .recording(var clock) = preview.phase else {
+            coordinator.togglePause()
             return
         }
         if clock.isPaused {
@@ -85,60 +180,131 @@ final class RecorderViewModel {
         } else {
             clock.pause(at: date)
         }
-        phase = .recording(clock)
+        preview.phase = .recording(clock)
     }
 
     func stopRecording() {
-        guard case .recording = phase else {
+        guard case .recording = preview.phase else {
+            coordinator.requestStop()
             return
         }
-        phase = .ready
-        hasSavedRecording = true
+        preview.phase = nil
+        preview.savedRecordingTitle = RecorderPreviewData.sample.savedRecordingTitle
     }
 
-    // MARK: - Issues
+    /// Ends any recording and waits until its media is safe, for quitting.
+    func stopAndWait() async {
+        await coordinator.stopAndWait()
+    }
 
-    /// Simulates the issue's fix, as if the user resolved it in System Settings or a picker.
-    func performIssuePrimaryAction() {
-        guard let issue else {
+    func makeConfiguration() -> RecordingConfiguration {
+        let target: CaptureTarget? =
+            switch captureMode {
+            case .screen: selectedDisplay.map(CaptureTarget.display)
+            case .window: selectedWindow.map(CaptureTarget.window)
+            case .audioOnly: .audioOnly
+            }
+        return RecordingConfiguration(
+            target: target,
+            microphone: isMicrophoneEnabled ? selectedMicrophone : nil,
+            capturesSystemAudio: isSystemAudioEnabled,
+            quality: quality,
+            frameRate: frameRate,
+            transcribesWhenFinished: transcribesWhenFinished
+        )
+    }
+
+    // MARK: - Folder
+
+    func openRecordingsFolder() {
+        guard let url = location?.url else {
             return
         }
-        if issue == .sourceUnavailable {
-            captureMode = .window
-        }
-        self.issue = nil
+        reveal(url)
     }
 
-    /// Applies the issue's fallback. Record Audio Only keeps the permission callout visible but re-enables Start.
-    func performIssueSecondaryAction() {
-        switch issue {
-        case .screenRecordingPermission:
-            captureMode = .audioOnly
+    func reveal(_ url: URL) {
+        let systemActions = dependencies.systemActions
+        Task {
+            await systemActions.openInFinder(url)
+        }
+    }
+
+    func chooseFolder(_ url: URL) {
+        clearIssue()
+        Task {
+            do {
+                try await dependencies.storage.useFolder(url)
+            } catch {
+                Self.logger.error("Could not use the chosen folder: \(String(describing: error))")
+                actionIssue = .folderAccess(path: url.path(percentEncoded: false))
+            }
+            location = await dependencies.storage.currentLocation()
+        }
+    }
+
+    func folderSelectionFailed(_ error: any Error) {
+        Self.logger.error("Folder selection failed: \(String(describing: error))")
+        actionIssue = .folderAccess(path: recordingsFolderPath)
+    }
+
+    func useDefaultFolder() {
+        clearIssue()
+        Task {
+            await dependencies.storage.useDefaultFolder()
+            location = await dependencies.storage.currentLocation()
+        }
+    }
+
+    // MARK: - Setup screen lifetime
+
+    /// Sources and meters are live only while the setup screen is showing in the active app, so nothing listens to
+    /// the microphone or system audio behind the user's back.
+    func setSetupVisible(_ isVisible: Bool) {
+        isSetupVisible = isVisible
+        refreshTask?.cancel()
+        refreshTask = nil
+        guard isVisible else {
+            levelPreview.stop()
             return
-        case .microphonePermission:
-            isMicrophoneEnabled = false
-        case .sourceUnavailable:
-            captureMode = .screen
-        case .lowDiskSpace:
-            quality = .hd720
-        case .folderAccess, nil:
-            break
         }
-        issue = nil
-    }
-
-    // MARK: - Preview scenarios
-
-    func apply(_ scenario: RecorderPreviewScenario, at date: Date = .now) {
-        captureMode = scenario == .picker ? .window : .screen
-        issue = scenario.issue
-        hasSavedRecording = scenario == .saved
-        phase = .ready
-        if scenario == .recording {
-            phase = .recording(RecordingClock(startedAt: date.addingTimeInterval(-Self.sampleElapsedSeconds)))
+        refreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refresh()
+                do {
+                    try await Task.sleep(for: Self.refreshInterval)
+                } catch {
+                    return
+                }
+            }
         }
     }
 
-    /// The design shows a recording that has been running for 12:34.
-    private static let sampleElapsedSeconds: TimeInterval = 754
+    /// Reloads sources, storage and whatever depends on permissions. Never prompts.
+    func refresh() async {
+        guard !preview.isActive else {
+            return
+        }
+        let provider = dependencies.sourceProvider
+        let microphones = await provider.availableMicrophones()
+        do {
+            let sources = try await provider.availableSources()
+            selection.update(sources: sources, microphones: microphones, captureMode: captureMode)
+            sourceDiscoveryIssue = nil
+        } catch {
+            Self.logger.error("Could not list capture sources: \(String(describing: error))")
+            sourceDiscoveryIssue = .sourcesUnavailable(detail: error.localizedDescription)
+        }
+        hasLoadedSources = true
+        isMicrophoneAccessDenied = dependencies.permissions.microphoneAccess() == .denied
+        location = await dependencies.storage.currentLocation()
+        clearFailureThatNoLongerApplies()
+        if captureMode == .window, !selection.windowsWithoutThumbnail.isEmpty {
+            selection.addThumbnails(await provider.windowThumbnails(for: selection.windowsWithoutThumbnail))
+        }
+        updateLevelPreview()
+    }
+
+    private static let refreshInterval = Duration.seconds(3)
+    private static let logger = Logger(subsystem: "dev.local.Recorder", category: "Recorder")
 }

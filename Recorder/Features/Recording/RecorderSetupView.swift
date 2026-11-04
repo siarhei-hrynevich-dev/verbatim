@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The Ready state: last-used capture settings, an optional callout, and the Start Recording action.
@@ -21,15 +22,32 @@ struct RecorderSetupView: View {
                     selection: $viewModel.captureMode
                 )
                 CaptureSourcePicker(viewModel: viewModel)
-                AudioSourcesSection(viewModel: viewModel)
+                AudioSourcesSection(viewModel: viewModel, selection: viewModel.selection)
                 RecordingOptionsSection(viewModel: viewModel)
             }
+            .disabled(viewModel.phase != .ready)
             .padding(.horizontal, RecorderLayout.horizontalPadding)
             .padding(.top, 4)
 
             Spacer(minLength: 0)
 
             footer
+        }
+        .onAppear { viewModel.setSetupVisible(NSApp.isActive) }
+        // Shows real sources even when the app opened in the background.
+        .task { await viewModel.refresh() }
+        .onDisappear { viewModel.setSetupVisible(false) }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            viewModel.setSetupVisible(true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            viewModel.setSetupVisible(false)
+        }
+        .fileImporter(isPresented: $viewModel.isChoosingFolder, allowedContentTypes: [.folder]) { result in
+            switch result {
+            case .success(let url): viewModel.chooseFolder(url)
+            case .failure(let error): viewModel.folderSelectionFailed(error)
+            }
         }
     }
 
@@ -45,8 +63,8 @@ struct RecorderSetupView: View {
 
     private var footer: some View {
         VStack(spacing: 8) {
-            if viewModel.hasSavedRecording {
-                savedNotice
+            if let savedRecordingTitle = viewModel.savedRecordingTitle {
+                savedNotice(title: savedRecordingTitle)
             }
 
             Button {
@@ -56,7 +74,7 @@ struct RecorderSetupView: View {
                     Circle()
                         .fill(.white)
                         .frame(width: 11, height: 11)
-                    Text("Start Recording")
+                    Text(viewModel.phase == .preparing ? "Preparing…" : "Start Recording")
                 }
             }
             .buttonStyle(.verbatim(.record, size: .large))
@@ -64,8 +82,7 @@ struct RecorderSetupView: View {
             .disabled(!viewModel.canStartRecording)
 
             HStack(spacing: 6) {
-                IconView(.folder, size: 12)
-                Text(viewModel.sources.storageSummary)
+                folderButton
                 Spacer(minLength: 0)
                 Text("⌘⇧R")
                     .accessibilityHidden(true)
@@ -78,11 +95,29 @@ struct RecorderSetupView: View {
         .padding(.bottom, 18)
     }
 
-    private var savedNotice: some View {
+    /// Opens the recordings folder in Finder; its context menu changes the folder.
+    private var folderButton: some View {
+        Button(action: viewModel.openRecordingsFolder) {
+            HStack(spacing: 6) {
+                IconView(.folder, size: 12)
+                Text(viewModel.storageSummary)
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Show in Finder")
+        .contextMenu {
+            Button("Choose Folder…") {
+                viewModel.isChoosingFolder = true
+            }
+            Button("Use Default Location", action: viewModel.useDefaultFolder)
+        }
+    }
+
+    private func savedNotice(title: String) -> some View {
         HStack(spacing: 8) {
             IconView(.check, size: 14)
                 .foregroundStyle(VerbatimColor.green)
-            Text("Saved “\(viewModel.sources.savedRecordingTitle)” · transcription queued")
+            Text("Saved “\(title)”")
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button("Show in Library", action: showLibrary)
                 .buttonStyle(LinkButtonStyle())

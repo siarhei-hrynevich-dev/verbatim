@@ -42,16 +42,17 @@ struct ActiveRecordingView: View {
     private var audioLevels: some View {
         GroupedSection {
             HStack(spacing: 10) {
-                IconTile(icon: viewModel.isMicrophoneEnabled ? .microphone : .microphoneOff, tint: VerbatimColor.orange)
+                IconTile(icon: viewModel.isMicrophoneActive ? .microphone : .microphoneOff, tint: VerbatimColor.orange)
                 Text("Microphone \(deviceSuffix)")
                     .font(.system(size: 13))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                SimulatedLevelMeter(
-                    isActive: viewModel.isMicrophoneEnabled && !clock.isPaused,
-                    seed: 1,
+                AudioSourceLevelMeter(
+                    viewModel: viewModel,
+                    source: .microphone,
+                    isActive: viewModel.isMicrophoneActive && !clock.isPaused,
                     accessibilityLabel: "Microphone level"
                 )
-                sourceState(isOn: viewModel.isMicrophoneEnabled)
+                sourceState(isOn: viewModel.isMicrophoneActive)
             }
             .audioRowLayout()
 
@@ -62,19 +63,20 @@ struct ActiveRecordingView: View {
                 Text("System Audio")
                     .font(.system(size: 13))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                SimulatedLevelMeter(
-                    isActive: viewModel.isSystemAudioEnabled && !clock.isPaused,
-                    seed: 4,
+                AudioSourceLevelMeter(
+                    viewModel: viewModel,
+                    source: .systemAudio,
+                    isActive: viewModel.isSystemAudioActive && !clock.isPaused,
                     accessibilityLabel: "System audio activity"
                 )
-                sourceState(isOn: viewModel.isSystemAudioEnabled)
+                sourceState(isOn: viewModel.isSystemAudioActive)
             }
             .audioRowLayout()
         }
     }
 
     private var deviceSuffix: Text {
-        Text(verbatim: "· \(viewModel.selectedMicrophone)")
+        Text(verbatim: "· \(viewModel.activeMicrophoneName)")
             .foregroundStyle(VerbatimColor.secondaryText)
     }
 
@@ -89,16 +91,14 @@ struct ActiveRecordingView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("You can close this window. Recording continues and can be stopped from the Dock or the menu bar.")
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                IconView(.pause, size: 13)
-                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
-                Text(
-                    """
-                    Transcription of “\(viewModel.sources.pausedTranscriptionTitle)” is paused and resumes when you \
-                    stop.
-                    """
-                )
-                .fixedSize(horizontal: false, vertical: true)
+            // Shown for design review only until a processing queue exists to actually pause.
+            if let pausedTranscriptionTitle = viewModel.preview.pausedTranscriptionTitle {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    IconView(.pause, size: 13)
+                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
+                    Text("Transcription of “\(pausedTranscriptionTitle)” is paused and resumes when you stop.")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .font(.system(size: 12))
@@ -120,6 +120,7 @@ struct ActiveRecordingView: View {
             }
             .buttonStyle(.verbatim(.secondary, size: .large))
             .frame(width: Self.pauseButtonWidth)
+            .disabled(isFinishing)
 
             Button {
                 viewModel.stopRecording()
@@ -128,7 +129,7 @@ struct ActiveRecordingView: View {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(.white)
                         .frame(width: 11, height: 11)
-                    Text("Stop Recording")
+                    Text(isFinishing ? "Saving…" : "Stop Recording")
                     Text("⌘⇧R")
                         .font(.system(size: 12, weight: .regular))
                         .opacity(0.8)
@@ -138,14 +139,22 @@ struct ActiveRecordingView: View {
             }
             .buttonStyle(.verbatim(.record, size: .large))
             .keyboardShortcut("r", modifiers: [.command, .shift])
+            .disabled(isFinishing)
         }
         .padding(.horizontal, RecorderLayout.horizontalPadding)
         .padding(.top, 16)
         .padding(.bottom, 18)
     }
 
+    private var isFinishing: Bool {
+        if case .finishing = viewModel.phase {
+            return true
+        }
+        return false
+    }
+
     private var sourceIcon: VerbatimIcon {
-        switch viewModel.captureMode {
+        switch viewModel.activeCaptureMode {
         case .screen: .monitor
         case .window: .window
         case .audioOnly: .audio
@@ -153,18 +162,18 @@ struct ActiveRecordingView: View {
     }
 
     private var sourceDescription: String {
-        let videoSettings = "\(viewModel.quality.rawValue) · \(viewModel.frameRate.rawValue) fps"
-        switch viewModel.captureMode {
-        case .screen:
-            return "\(viewModel.selectedDisplay?.name ?? "") · \(videoSettings)"
-        case .window:
-            guard let window = viewModel.selectedWindow else {
-                return videoSettings
-            }
-            return "\(window.appName) — \(window.title) · \(videoSettings)"
-        case .audioOnly:
-            return String(localized: "Audio only · Microphone + System Audio")
+        guard viewModel.activeCaptureMode == .audioOnly else {
+            return "\(viewModel.activeSourceName) · \(viewModel.activeVideoSummary)"
         }
+        var sources: [String] = []
+        if viewModel.isMicrophoneActive {
+            sources.append(String(localized: "Microphone"))
+        }
+        if viewModel.isSystemAudioActive {
+            sources.append(String(localized: "System Audio"))
+        }
+        let audioOnly = String(localized: "Audio only")
+        return "\(audioOnly) · \(sources.joined(separator: " + "))"
     }
 
     /// The design splits the footer one third Pause, two thirds Stop.

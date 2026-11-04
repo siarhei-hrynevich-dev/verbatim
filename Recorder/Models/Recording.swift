@@ -41,4 +41,14 @@ struct Recording: Identifiable, Codable, Equatable, Sendable {
         self.duration = duration
         self.processingStatus = processingStatus
     }
+
+    /// A newly finished recording. Its title is generated, and its duration comes from finished media or a running
+    /// clock, so neither can violate the invariants of the validating initializer; a nonsensical duration reads as 0.
+    init(id: UUID, createdAt: Date, validatedMediaDuration: TimeInterval, processingStatus: ProcessingStatus) {
+        self.id = id
+        title = RecordingMetadata.defaultTitle(createdAt: createdAt)
+        self.createdAt = createdAt
+        duration = validatedMediaDuration.isFinite ? max(validatedMediaDuration, 0) : 0
+        self.processingStatus = processingStatus
+    }
 }

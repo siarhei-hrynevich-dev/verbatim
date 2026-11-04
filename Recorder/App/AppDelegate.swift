@@ -3,11 +3,11 @@ import AppKit
 /// AppKit integration that SwiftUI scenes do not provide: the Dock menu, recording indicators in the menu bar and
 /// Dock, and confirmation before quitting during a recording.
 ///
-/// It owns the Recorder view model, because the Dock menu and menu bar item act on the same recording as the
-/// Recorder window.
+/// It holds the composition root's Recorder view model, because the Dock menu and menu bar item act on the same
+/// recording as the Recorder window. The recording itself lives in `RecordingCoordinator`, so it outlasts any window.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let recorderViewModel = RecorderViewModel(sources: .sample, scenario: .fromLaunchArguments())
+    let recorderViewModel = AppComposition.makeRecorderViewModel(scenario: .fromLaunchArguments())
     let navigator = WindowNavigator()
 
     override init() {
@@ -38,6 +38,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.indicators = indicators
     }
 
+    /// Closing the Recorder window must never end a recording.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     /// A Dock click without open windows brings back the Recorder (with an active recording, if any), never the
     /// Library.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -52,29 +57,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RecordingMenus.dockMenu(recorder: recorderViewModel, navigator: navigator)
     }
 
-    /// Quitting while recording asks first; Stop and Quit saves the recording before the app terminates.
+    /// Quitting while recording asks first. Stop and Quit waits until the media is finalized, and quits even if that
+    /// fails, because whatever was captured stays on disk.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let clock = recorderViewModel.activeClock else {
+        if let clock = recorderViewModel.activeClock, !confirmStopAndQuit(clock: clock) {
+            return .terminateCancel
+        }
+        guard recorderViewModel.isCaptureBusy else {
+            recorderViewModel.stopRecording()
             return .terminateNow
         }
+        Task {
+            await recorderViewModel.stopAndWait()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
+    private func confirmStopAndQuit(clock: RecordingClock) -> Bool {
         let alert = NSAlert()
         alert.messageText = String(localized: "Stop recording and quit?")
         let timer = RecordingClock.timerText(for: clock.elapsed(at: .now))
-        let folder = recorderViewModel.sources.recordingsFolderPath
+        let folder = recorderViewModel.recordingsFolderPath
         alert.informativeText = String(
-            localized: """
-                The current recording (\(timer)) will be saved to \(folder) first. Transcription starts the next \
-                time you open Verbatim.
-                """
+            localized: "The current recording (\(timer)) will be saved to \(folder) first."
         )
         alert.addButton(withTitle: String(localized: "Stop and Quit"))
         let keepRecording = alert.addButton(withTitle: String(localized: "Keep Recording"))
         keepRecording.keyEquivalent = "\u{1b}"
-
-        guard alert.runModal() == .alertFirstButtonReturn else {
-            return .terminateCancel
-        }
-        recorderViewModel.stopRecording()
-        return .terminateNow
+        return alert.runModal() == .alertFirstButtonReturn
     }
 }
