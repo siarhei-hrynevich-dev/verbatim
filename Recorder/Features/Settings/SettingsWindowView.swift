@@ -48,7 +48,7 @@ struct SettingsWindowView: View {
         case .general:
             GeneralSettingsView(viewModel: viewModel)
         case .models:
-            ModelSettingsView(viewModel: viewModel.models)
+            ModelSettingsView(viewModel: viewModel.models, language: $viewModel.transcriptionLanguage)
         case .storage:
             StorageSettingsView(viewModel: viewModel)
         case .about:

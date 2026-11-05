@@ -46,6 +46,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The Recorder closed with Quit selected while capture was busy, so quitting waits until the file is saved.
     private var quitsWhenCaptureEnds = false
 
+    /// Unit tests run inside this app. The queue opens the user's real library and can run jobs from it, so it stays
+    /// shut; tests build their own coordinators on temporary folders.
+    private static var isHostingTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
     /// Design states passed at launch open their windows, so each state can be reviewed directly.
     private static func launchRequests() -> [WindowNavigator.LaunchRequest] {
         var requests: [WindowNavigator.LaunchRequest] = []
@@ -70,10 +76,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         indicators.start()
         self.indicators = indicators
         viewModels.recordingPriority.start()
-        // Reads metadata and file sizes only: no model is downloaded or loaded at launch.
+        // Reads metadata and file sizes only: no model is downloaded or loaded at launch. A job left unfinished by the
+        // last run continues afterwards, and it is what loads a model, on demand.
         let modelManager = viewModels.modelManager
+        let processing = viewModels.processing
+        let resumesQueue = !Self.isHostingTests
         Task {
             await modelManager.reconcile()
+            if resumesQueue {
+                await processing.start()
+            }
         }
     }
 

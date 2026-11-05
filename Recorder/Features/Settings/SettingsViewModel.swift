@@ -68,6 +68,11 @@ final class SettingsViewModel {
         set { dependencies.preferences.update { $0.closeBehavior = newValue } }
     }
 
+    var transcriptionLanguage: TranscriptionLanguage {
+        get { dependencies.preferences.settings.transcriptionLanguage }
+        set { dependencies.preferences.update { $0.transcriptionLanguage = newValue } }
+    }
+
     var dockClickNote: String {
         opensRecorderOnDockClick
             ? String(localized: "Shows the Recorder, or the recording in progress.")

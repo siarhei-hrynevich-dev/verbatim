@@ -17,6 +17,7 @@ extension ViewerViewModel {
         actionIssue = nil
         position = 0
         speed = .normal
+        forgetTranscript()
         resetTranscriptPresentation()
         playbackState = .loading
         loadTask = Task { [weak self] in
@@ -41,6 +42,7 @@ extension ViewerViewModel {
             return
         }
         endLiveSession()
+        forgetTranscript()
         recordingID = nil
         recording = nil
         title = ""
@@ -62,6 +64,7 @@ extension ViewerViewModel {
                 return
             }
             showMetadata(of: stored, inspection: inspection, recordingsFolder: folder)
+            await reloadTranscriptIfNeeded()
         } catch LibraryError.recordingNotFound {
             guard !Task.isCancelled, id == recordingID else {
                 return
@@ -191,6 +194,10 @@ extension ViewerViewModel {
                 return
             }
             showMetadata(of: stored, inspection: inspection, recordingsFolder: folder)
+            await reloadTranscriptIfNeeded()
+            guard !Task.isCancelled else {
+                return
+            }
 
             let media = try await library.openMedia(of: id)
             guard !Task.isCancelled else {
@@ -242,7 +249,12 @@ extension ViewerViewModel {
         if recording == nil || title == recording?.item.title {
             title = item.title
         }
-        recording = ViewerRecording(item: item, transcript: [], transcriptState: .unavailable, language: "")
+        recording = ViewerRecording(
+            item: item,
+            transcript: recording?.transcript ?? [],
+            transcriptState: recording?.transcriptState ?? (processing == nil ? .unavailable : .notProcessed),
+            language: recording?.language ?? ""
+        )
     }
 
     private func performFileAction(_ action: @escaping @MainActor (LibraryService, UUID) async throws -> Void) {

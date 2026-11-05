@@ -23,7 +23,7 @@ enum LibraryFilter: CaseIterable, Hashable, Sendable {
             return item.recordedAt >= start
         case .processing:
             switch item.status {
-            case .transcribing, .indexing: return true
+            case .pending, .transcribing, .indexing: return true
             case .recorded, .failed: return item.canStartProcessing
             case .ready, .missing: return false
             }
@@ -47,7 +47,7 @@ enum LibraryFilter: CaseIterable, Hashable, Sendable {
                 to: calendar.startOfDay(for: now)
             )
         case .processing:
-            query.statuses = [.transcribing, .indexing]
+            query.statuses = [.pending, .transcribing, .indexing, .failed]
         case .screen:
             query.captureModes = [.screen, .window]
         case .audio:

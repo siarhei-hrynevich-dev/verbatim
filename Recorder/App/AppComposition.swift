@@ -11,7 +11,8 @@ enum AppComposition {
         let settings: SettingsViewModel
         let preferences: AppPreferences
         let modelManager: ModelManager
-        /// Holds model work back while recording.
+        let processing: ProcessingCoordinator
+        /// Holds model and transcription work back while recording.
         let recordingPriority: RecordingPriorityPolicy
         /// Renders the Viewer's video. Created here because it is the one view tied to the concrete player.
         let viewerVideoSurface: AnyView
@@ -25,36 +26,26 @@ enum AppComposition {
         viewerScenario: ViewerPreviewScenario?,
         settingsScenario: SettingsPreviewScenario?
     ) -> ViewModels {
-        let engine = ScreenCaptureEngine()
-        let permissions = SystemCapturePermissions()
         let store = FileRecordingStore(defaults: .standard, defaultFolder: FileRecordingStore.defaultFolder())
         let systemActions = WorkspaceSystemActions()
-        let library = LibraryService(
-            repository: SQLiteRecordingRepository(databaseURL: SQLiteRecordingRepository.defaultDatabaseURL()),
-            fileStore: LocalRecordingFileStore(systemActions: systemActions),
-            thumbnails: VideoThumbnailProvider(cacheFolder: VideoThumbnailProvider.defaultCacheFolder()),
-            destinations: store
-        )
-        let coordinator = RecordingCoordinator(
-            engine: engine,
-            permissions: permissions,
-            destinations: store,
-            metadataStore: store,
-            library: library
-        )
-        let recorder = makeRecorder(
-            coordinator: coordinator,
-            engine: engine,
-            permissions: permissions,
-            store: store,
-            systemActions: systemActions
-        )
-        if let recorderScenario {
-            recorder.apply(recorderScenario)
-        }
-        let playback = AVPlaybackService()
+        let databaseURL = SQLiteRecordingRepository.defaultDatabaseURL()
+        let library = makeLibrary(databaseURL: databaseURL, store: store, systemActions: systemActions)
         let preferences = AppPreferences(repository: UserDefaultsSettingsRepository(defaults: .standard))
         let modelManager = makeModelManager()
+        let processing = makeProcessing(
+            databaseURL: databaseURL,
+            library: library,
+            modelManager: modelManager,
+            preferences: preferences
+        )
+        let (coordinator, recorder) = makeRecording(
+            library: library,
+            processing: processing,
+            store: store,
+            systemActions: systemActions,
+            scenario: recorderScenario
+        )
+        let playback = AVPlaybackService()
         let settings = makeSettings(
             library: library,
             recorder: recorder,
@@ -67,24 +58,79 @@ enum AppComposition {
         }
         return ViewModels(
             recorder: recorder,
-            library: LibraryViewModel(service: library, previewScenario: libraryScenario),
-            viewer: ViewerViewModel(library: library, playback: playback, previewScenario: viewerScenario),
+            library: LibraryViewModel(service: library, processing: processing, previewScenario: libraryScenario),
+            viewer: ViewerViewModel(
+                library: library,
+                playback: playback,
+                processing: processing,
+                previewScenario: viewerScenario
+            ),
             settings: settings,
             preferences: preferences,
             modelManager: modelManager,
-            recordingPriority: RecordingPriorityPolicy(coordinator: coordinator, models: modelManager),
+            processing: processing,
+            recordingPriority: RecordingPriorityPolicy(
+                coordinator: coordinator,
+                models: modelManager,
+                processing: processing
+            ),
             viewerVideoSurface: AnyView(AVPlayerSurface(service: playback))
         )
     }
 
-    private static func makeRecorder(
-        coordinator: RecordingCoordinator,
-        engine: ScreenCaptureEngine,
-        permissions: SystemCapturePermissions,
+    private static func makeProcessing(
+        databaseURL: URL,
+        library: LibraryService,
+        modelManager: ModelManager,
+        preferences: AppPreferences
+    ) -> ProcessingCoordinator {
+        let store = SQLiteTranscriptRepository(databaseURL: databaseURL)
+        let processing = ProcessingCoordinator(
+            dependencies: ProcessingCoordinator.Dependencies(
+                jobs: store,
+                transcripts: store,
+                transcription: WhisperTranscriptionService(),
+                models: modelManager,
+                library: library,
+                files: FileTranscriptStore(),
+                language: { preferences.settings.transcriptionLanguage }
+            )
+        )
+        library.removalObserver = processing
+        return processing
+    }
+
+    private static func makeLibrary(
+        databaseURL: URL,
         store: FileRecordingStore,
         systemActions: WorkspaceSystemActions
-    ) -> RecorderViewModel {
-        RecorderViewModel(
+    ) -> LibraryService {
+        LibraryService(
+            repository: SQLiteRecordingRepository(databaseURL: databaseURL),
+            fileStore: LocalRecordingFileStore(systemActions: systemActions),
+            thumbnails: VideoThumbnailProvider(cacheFolder: VideoThumbnailProvider.defaultCacheFolder()),
+            destinations: store
+        )
+    }
+
+    private static func makeRecording(
+        library: LibraryService,
+        processing: ProcessingCoordinator,
+        store: FileRecordingStore,
+        systemActions: WorkspaceSystemActions,
+        scenario: RecorderPreviewScenario?
+    ) -> (RecordingCoordinator, RecorderViewModel) {
+        let engine = ScreenCaptureEngine()
+        let permissions = SystemCapturePermissions()
+        let coordinator = RecordingCoordinator(
+            engine: engine,
+            permissions: permissions,
+            destinations: store,
+            metadataStore: store,
+            library: library,
+            transcriptionScheduler: processing
+        )
+        let recorder = RecorderViewModel(
             dependencies: RecorderViewModel.Dependencies(
                 coordinator: coordinator,
                 sourceProvider: CaptureSourceDiscovery(),
@@ -95,6 +141,10 @@ enum AppComposition {
                 systemActions: systemActions
             )
         )
+        if let scenario {
+            recorder.apply(scenario)
+        }
+        return (coordinator, recorder)
     }
 
     private static func makeSettings(

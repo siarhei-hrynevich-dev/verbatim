@@ -13,6 +13,8 @@ final class LibraryService: FinishedRecordingRegistry {
     /// Advances whenever the library's contents change.
     private(set) var revision = 0
 
+    /// Told when a recording leaves, so work on it stops. Set once by App.
+    @ObservationIgnored weak var removalObserver: (any RecordingRemovalObserving)?
     @ObservationIgnored private let repository: any RecordingRepository
     @ObservationIgnored private let fileStore: any RecordingFileStore
     @ObservationIgnored private let thumbnails: any RecordingThumbnailProvider
@@ -69,9 +71,12 @@ final class LibraryService: FinishedRecordingRegistry {
             guard inspection.media != recording.media else {
                 continue
             }
-            var moved = recording
-            moved.media = inspection.media
             do {
+                // Read afresh: only the location changes, and a job may have moved the status on since then.
+                guard var moved = try await repository.fetch(id: recording.id) else {
+                    continue
+                }
+                moved.media = inspection.media
                 try await repository.update(moved)
             } catch {
                 Self.logger.error("Could not store a moved file's location: \(String(describing: error))")
@@ -139,13 +144,22 @@ final class LibraryService: FinishedRecordingRegistry {
     func removeFromLibrary(_ id: UUID) async throws -> LibraryRecording {
         let recording = try await existingRecording(id)
         try await repository.delete(id: id)
+        removalObserver?.recordingRemoved(id, permanently: false)
         await thumbnails.discardThumbnail(for: id)
         revision += 1
         return recording
     }
 
+    /// Any job on the recording ended with its removal, so it must not come back looking queued or running.
     func restore(_ recording: LibraryRecording) async throws {
-        try await repository.insert(recording)
+        var restored = recording
+        switch recording.recording.processingStatus {
+        case .pending, .transcribing, .indexing:
+            restored.recording.processingStatus = recording.hasTranscript ? .ready : .recorded
+        case .recorded, .ready, .failed:
+            break
+        }
+        try await repository.insert(restored)
         revision += 1
     }
 
@@ -163,6 +177,7 @@ final class LibraryService: FinishedRecordingRegistry {
             Self.logger.error("A trashed recording's entry could not be removed: \(String(describing: error))")
             throw LibraryError.entryKeptAfterTrash(detail: String(describing: error))
         }
+        removalObserver?.recordingRemoved(id, permanently: true)
         return filesLeftBehind
     }
 

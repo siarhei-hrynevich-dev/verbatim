@@ -56,7 +56,7 @@ actor SQLiteRecordingRepository: RecordingRepository {
 
     func fetch(id: UUID) throws -> LibraryRecording? {
         try perform { database in
-            try database.query("SELECT * FROM recordings WHERE id = ?", bindings: [.text(Self.key(for: id))])
+            try database.query("\(Self.selection) WHERE id = ?", bindings: [.text(Self.key(for: id))])
                 .compactMap(Self.recording(from:))
                 .first
         }
@@ -66,7 +66,7 @@ actor SQLiteRecordingRepository: RecordingRepository {
         let (condition, bindings) = Self.condition(for: query)
         return try perform { database in
             try database.query(
-                "SELECT * FROM recordings \(condition) ORDER BY \(Self.ordering(for: query.sortOrder))",
+                "\(Self.selection) \(condition) ORDER BY \(Self.ordering(for: query.sortOrder))",
                 bindings: bindings
             )
             .compactMap(Self.recording(from:))
@@ -156,31 +156,9 @@ actor SQLiteRecordingRepository: RecordingRepository {
         if let openDatabase {
             return openDatabase
         }
-        let database: SQLiteDatabase
-        do {
-            try FileManager.default.createDirectory(
-                at: databaseURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            database = try SQLiteDatabase(url: databaseURL)
-        } catch {
-            Self.logger.error("Could not open the Library database: \(String(describing: error))")
-            throw LibraryError.databaseUnavailable(detail: Self.detail(of: error))
-        }
-        do {
-            try LibrarySchema.migrate(database, using: migrations)
-        } catch let error as LibraryError {
-            throw error
-        } catch {
-            Self.logger.error("Could not migrate the Library database: \(String(describing: error))")
-            throw LibraryError.databaseMigrationFailed(detail: Self.detail(of: error))
-        }
+        let database = try LibrarySchema.open(at: databaseURL, using: migrations)
         openDatabase = database
         return database
-    }
-
-    private static func detail(of error: any Error) -> String {
-        (error as? SQLiteDatabase.Failure)?.message ?? error.localizedDescription
     }
 
     // MARK: - Mapping
@@ -210,7 +188,8 @@ actor SQLiteRecordingRepository: RecordingRepository {
                 recording: recording,
                 captureMode: captureMode,
                 media: MediaReference(url: URL(fileURLWithPath: path), bookmark: row.blob("media_bookmark")),
-                fileSizeBytes: row.integer("file_size") ?? 0
+                fileSizeBytes: row.integer("file_size") ?? 0,
+                hasTranscript: row.integer("has_transcript") == 1
             )
         } catch {
             logger.error("Skipped an invalid Library entry: \(String(describing: error))")
@@ -284,6 +263,11 @@ actor SQLiteRecordingRepository: RecordingRepository {
     private static func milliseconds(since date: Date) -> Int64 {
         Int64((date.timeIntervalSince1970 * 1_000).rounded())
     }
+
+    private static let selection = """
+        SELECT *, EXISTS (SELECT 1 FROM transcripts WHERE recording_id = recordings.id) AS has_transcript
+        FROM recordings
+        """
 
     private static let logger = Logger(subsystem: "dev.local.Recorder", category: "Library")
 }

@@ -128,6 +128,7 @@ private struct RecordingStatusView: View {
                 Text(item.status.label)
                     .foregroundStyle(item.status.labelColor)
                     .lineLimit(1)
+                    .help(item.failureIssue?.message ?? "")
                 if let actionTitle = item.statusActionTitle {
                     Button(actionTitle, action: performAction)
                         .buttonStyle(.verbatim(.secondary, size: .small))
@@ -257,9 +258,10 @@ extension LibraryItem.Status {
     var label: String {
         switch self {
         case .ready: String(localized: "Ready")
+        case .pending: String(localized: "Pending")
         case .transcribing(let progress): String(localized: "Transcribing \(Self.percent(progress))%")
         case .indexing(let progress): String(localized: "Indexing \(Self.percent(progress))%")
-        case .recorded: String(localized: "Recorded")
+        case .recorded: String(localized: "Not Transcribed")
         case .failed: String(localized: "Failed")
         case .missing: String(localized: "File missing")
         }
@@ -269,7 +271,7 @@ extension LibraryItem.Status {
         switch self {
         case .ready: .check
         case .transcribing, .indexing: .loader
-        case .recorded: .clock
+        case .pending, .recorded: .clock
         case .failed: .alert
         case .missing: .missingFile
         }
@@ -279,14 +281,14 @@ extension LibraryItem.Status {
         switch self {
         case .ready: VerbatimColor.green
         case .transcribing, .indexing: VerbatimColor.accent
-        case .recorded: VerbatimColor.secondaryText
+        case .pending, .recorded: VerbatimColor.secondaryText
         case .failed, .missing: VerbatimColor.red
         }
     }
 
     var labelColor: Color {
         switch self {
-        case .ready, .recorded: VerbatimColor.secondaryText
+        case .ready, .pending, .recorded: VerbatimColor.secondaryText
         case .transcribing, .indexing: VerbatimColor.primaryText
         case .failed, .missing: VerbatimColor.red
         }
@@ -298,7 +300,7 @@ extension LibraryItem.Status {
         case .recorded: String(localized: "Transcribe")
         case .failed: String(localized: "Retry")
         case .missing: String(localized: "Locate…")
-        case .ready, .transcribing, .indexing: nil
+        case .ready, .pending, .transcribing, .indexing: nil
         }
     }
 

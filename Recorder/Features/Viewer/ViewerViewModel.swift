@@ -6,8 +6,8 @@ import os
 ///
 /// Live, it opens recordings by identifier through `LibraryService` and plays them through `PlaybackService`. For
 /// design review it can instead show a `ViewerPreviewScenario`: sample recordings and transcripts, a clock advanced by
-/// the view, and no media, in the same way as `LibraryViewModel`'s scenarios. Transcripts do not exist for real
-/// recordings yet, so a live recording has no lines; everything derived from `lines` is what real segments will use.
+/// the view, and no media, in the same way as `LibraryViewModel`'s scenarios. A live recording's lines come from its
+/// stored transcript, through `ProcessingCoordinator`.
 @MainActor
 @Observable
 final class ViewerViewModel {
@@ -36,12 +36,22 @@ final class ViewerViewModel {
     // that spans files. Views read them and call the actions.
 
     /// `nil` until the Library has answered, and when nothing is open.
-    var recording: ViewerRecording?
+    var recording: ViewerRecording? {
+        didSet {
+            let isSameTranscript = oldValue?.transcript == recording?.transcript
+            if !isSameTranscript || oldValue?.transcriptState != recording?.transcriptState {
+                transcriptChanged()
+            }
+        }
+    }
     /// The editable recording title in the window toolbar.
     var title = ""
     var playbackState = PlaybackState.idle
-    /// The playhead as shown. While dragging or seeking, this is where the user asked to go.
-    var position: TimeInterval = 0
+    /// The playhead as shown. While dragging or seeking, this is where the user asked to go. Changes many times a
+    /// second, so the transcript reads `activeLineIndex` instead, which changes only when another line starts.
+    var position: TimeInterval = 0 {
+        didSet { updateActiveLine() }
+    }
     /// What the open file really contains; `nil` until it has loaded.
     var mediaInfo: PlaybackMediaInfo?
     var speed = PlaybackSpeed.normal
@@ -49,6 +59,8 @@ final class ViewerViewModel {
     var volume = 1.0
     var isMuted = false
     var isLocatingFile = false
+    /// The format being saved through the save panel.
+    var exportRequest: ViewerExportFormat?
     /// A failed action that leaves playback as it was, such as Show in Finder.
     var actionIssue: LibraryIssue?
     /// Whether this shows a design scenario instead of a real recording.
@@ -58,12 +70,23 @@ final class ViewerViewModel {
     private(set) var searchText = ""
     /// Position of the current match within `matchingLineIndices`.
     private(set) var currentMatch = 0
+    /// The line being spoken at the playhead: the last line that starts at or before it.
+    private(set) var activeLineIndex: Int?
+    /// Indices of transcript lines containing the search text, ignoring case.
+    private(set) var matchingLineIndices: [Int] = []
 
     @ObservationIgnored let library: LibraryService?
     @ObservationIgnored let playback: (any PlaybackService)?
+    @ObservationIgnored let processing: ProcessingCoordinator?
     /// The stable identity of what is open; titles and file names can change.
     @ObservationIgnored var recordingID: UUID?
     @ObservationIgnored var openMedia: OpenMediaFile?
+    /// The transcript as stored, which exports are rendered from.
+    @ObservationIgnored var storedTranscript: Transcript?
+    /// Which completed job's transcript is showing, so a new one is loaded when it arrives.
+    @ObservationIgnored var loadedTranscriptStamp: Date?
+    /// Whether this session has read the stored transcript at all.
+    @ObservationIgnored var hasReadTranscript = false
     @ObservationIgnored var loadTask: Task<Void, Never>?
     @ObservationIgnored var seekTask: Task<Void, Never>?
     @ObservationIgnored var actionTask: Task<Void, Never>?
@@ -79,10 +102,12 @@ final class ViewerViewModel {
     init(
         library: LibraryService,
         playback: any PlaybackService,
+        processing: ProcessingCoordinator? = nil,
         previewScenario: ViewerPreviewScenario? = nil
     ) {
         self.library = library
         self.playback = playback
+        self.processing = processing
         previewData = .sample()
         isPreviewing = false
         if let previewScenario {
@@ -94,6 +119,7 @@ final class ViewerViewModel {
     init(previewData: ViewerPreviewData = .sample(), scenario: ViewerPreviewScenario = .video) {
         library = nil
         playback = nil
+        processing = nil
         self.previewData = previewData
         isPreviewing = true
         apply(scenario)
@@ -137,7 +163,7 @@ final class ViewerViewModel {
 
     /// Changes whenever the Library's contents do, so an open recording can follow a rename or a removal.
     var libraryRevision: Int {
-        library?.revision ?? 0
+        (library?.revision ?? 0) + (processing?.revision ?? 0)
     }
 
     var lines: [TranscriptLine] {
@@ -145,20 +171,6 @@ final class ViewerViewModel {
             return []
         }
         return recording.transcript
-    }
-
-    /// The line being spoken at the playhead: the last line that starts at or before it.
-    var activeLineIndex: Int? {
-        lines.lastIndex { $0.start <= position }
-    }
-
-    /// Indices of transcript lines containing the search text, ignoring case.
-    var matchingLineIndices: [Int] {
-        let query = trimmedQuery
-        guard !query.isEmpty else {
-            return []
-        }
-        return lines.indices.filter { lines[$0].text.range(of: query, options: .caseInsensitive) != nil }
     }
 
     var currentMatchLineIndex: Int? {
@@ -194,6 +206,7 @@ final class ViewerViewModel {
     func updateSearchText(_ text: String) {
         searchText = text
         currentMatch = 0
+        updateMatches()
     }
 
     func showNextMatch() {
@@ -204,8 +217,14 @@ final class ViewerViewModel {
         stepMatch(by: -1)
     }
 
-    /// Simulates starting transcription, from Generate Transcript or Retry Processing. Only design scenarios offer it.
+    /// Starts transcription, from Generate Transcript, Retry or Re-transcribe. Design scenarios simulate it.
     func startProcessing() {
+        guard isPreviewing else {
+            if let recordingID {
+                processing?.enqueue(recordingID)
+            }
+            return
+        }
         switch recording?.transcriptState {
         case .failed, .notProcessed:
             recording?.transcriptState = .processing(progress: Self.initialProgress)
@@ -218,6 +237,7 @@ final class ViewerViewModel {
         searchText = ""
         currentMatch = 0
         isFollowingPlayback = true
+        updateMatches()
     }
 
     // MARK: - Preview scenarios
@@ -241,7 +261,7 @@ final class ViewerViewModel {
         open(item, at: scenario.startPosition)
         playbackState = scenario == .video ? .playing : .paused
         if scenario == .search {
-            searchText = ViewerPreviewScenario.sampleSearchQuery
+            updateSearchText(ViewerPreviewScenario.sampleSearchQuery)
             currentMatch = 1
         }
     }
@@ -271,6 +291,38 @@ final class ViewerViewModel {
     }
 
     // MARK: - Private
+
+    private func transcriptChanged() {
+        updateActiveLine()
+        updateMatches()
+    }
+
+    /// Assigned only when it differs: anything showing the line redraws when this is written. Lines are in start order.
+    private func updateActiveLine() {
+        let lines = lines
+        var low = 0
+        var high = lines.count
+        while low < high {
+            let middle = (low + high) / 2
+            if lines[middle].start <= position {
+                low = middle + 1
+            } else {
+                high = middle
+            }
+        }
+        let active = low > 0 ? low - 1 : nil
+        if active != activeLineIndex {
+            activeLineIndex = active
+        }
+    }
+
+    private func updateMatches() {
+        let query = trimmedQuery
+        let lines = lines
+        matchingLineIndices =
+            query.isEmpty
+            ? [] : lines.indices.filter { lines[$0].text.range(of: query, options: .caseInsensitive) != nil }
+    }
 
     /// Each step moves the playhead to the match and follows it in the transcript.
     private func stepMatch(by offset: Int) {

@@ -4,6 +4,8 @@ import SwiftUI
 /// work and never loads a model.
 struct ModelSettingsView: View {
     @Bindable var viewModel: ModelSettingsViewModel
+    /// The language to transcribe in, which belongs to the preferences rather than to any model.
+    @Binding var language: TranscriptionLanguage
 
     @Environment(\.controlActiveState) private var controlActiveState
 
@@ -167,6 +169,22 @@ struct ModelSettingsView: View {
 
     private var processing: some View {
         SettingsSection(title: "Processing") {
+            SettingsRow(
+                title: "Transcription Language",
+                detail: String(localized: "Automatic detection works for most recordings, including mixed languages.")
+            ) {
+                SettingsPopUpMenu(
+                    accessibilityLabel: "Transcription Language",
+                    selectionTitle: language.title,
+                    selection: $language
+                ) {
+                    Text(TranscriptionLanguage.automatic.title).tag(TranscriptionLanguage.automatic)
+                    ForEach(TranscriptionLanguage.choices, id: \.self) { choice in
+                        Text(choice.title).tag(choice)
+                    }
+                }
+            }
+            GroupedDivider(leadingInset: 12)
             pausedWhileRecording
             GroupedDivider(leadingInset: 12)
             SettingsRow(title: "Space Used by AI Models", isCompact: true) {
@@ -190,8 +208,8 @@ struct ModelSettingsView: View {
                     .font(.system(size: 13))
                 Text(
                     """
-                    Model downloads and checks stop during a recording and continue when it ends, so capture stays \
-                    smooth. This can’t be turned off.
+                    Model downloads, checks and transcription stop during a recording and continue when it ends, so \
+                    capture stays smooth. This can’t be turned off.
                     """
                 )
                 .font(.system(size: 11))

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The Viewer window: the player with a floating control HUD on the left, a resizable transcript panel on the
 /// right, and the recording's title and file actions in the toolbar.
@@ -33,6 +34,14 @@ struct ViewerWindowView: View {
         .task(id: viewModel.isPlaying) { await runSimulatedClock() }
         // Follows renames and removals made in the Library while this recording is open.
         .task(id: viewModel.libraryRevision) { await viewModel.refreshMetadata() }
+        .fileExporter(
+            isPresented: exportBinding,
+            document: viewModel.exportDocument,
+            contentType: viewModel.exportRequest?.contentType ?? .plainText,
+            defaultFilename: viewModel.exportFileName
+        ) { result in
+            viewModel.finishExport(result)
+        }
         .fileImporter(isPresented: $viewModel.isLocatingFile, allowedContentTypes: [.movie, .audio]) { result in
             viewModel.finishLocating(result)
         }
@@ -71,7 +80,25 @@ struct ViewerWindowView: View {
     private var panelActions: ViewerWindowActions {
         var panelActions = actions
         panelActions.backToLibrary = backToLibrary
+        panelActions.copyTranscript = copyTranscript
+        panelActions.exportTranscript = { viewModel.requestExport($0) }
         return panelActions
+    }
+
+    private func copyTranscript() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(viewModel.transcriptText, forType: .string)
+    }
+
+    private var exportBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.exportRequest != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.exportRequest = nil
+                }
+            }
+        )
     }
 
     private var actionIssueBinding: Binding<Bool> {
@@ -138,7 +165,7 @@ struct ViewerWindowView: View {
                 hasTranscript: viewModel.recording?.hasTranscript ?? false,
                 canShowTranscriptInFinder: viewModel.canShowTranscriptInFinder,
                 showTranscriptInFinder: viewModel.showTranscriptInFinder,
-                actions: actions
+                actions: panelActions
             )
         }
         .disabled(viewModel.recording == nil)
@@ -155,6 +182,10 @@ struct ViewerWindowView: View {
             Button("Open Recording Folder", action: viewModel.openFolder)
             Button("Show Transcript in Finder", action: viewModel.showTranscriptInFinder)
                 .disabled(!viewModel.canShowTranscriptInFinder)
+            if let title = viewModel.transcriptionActionTitle {
+                Divider()
+                Button(title, action: viewModel.startProcessing)
+            }
         } label: {
             IconView(.more, size: 16)
                 .frame(width: 30)
@@ -183,10 +214,11 @@ struct ViewerWindowView: View {
     }
 }
 
-/// Navigation and transcript operations the Viewer hands to the app. Export, processing control and the logs are not
-/// implemented yet, and only design scenarios can reach them, so those actions default to doing nothing.
+/// Navigation and transcript operations the Viewer hands to the app. Pausing all processing, the logs and choosing a
+/// language here exist only in design scenarios, so those actions default to doing nothing.
 struct ViewerWindowActions {
     var backToLibrary: () -> Void = {}
+    var openSettings: () -> Void = {}
     var copyTranscript: () -> Void = {}
     var exportTranscript: (ViewerExportFormat) -> Void = { _ in }
     var pauseProcessing: () -> Void = {}
@@ -198,6 +230,22 @@ enum ViewerExportFormat: String, CaseIterable, Sendable {
     case txt = "TXT"
     case srt = "SRT"
     case json = "JSON"
+
+    var format: TranscriptFormat {
+        switch self {
+        case .txt: .text
+        case .srt: .subtitles
+        case .json: .json
+        }
+    }
+
+    var contentType: UTType {
+        switch self {
+        case .txt: .plainText
+        case .srt: UTType(filenameExtension: "srt") ?? .plainText
+        case .json: .json
+        }
+    }
 }
 
 /// Fixed metrics of the Viewer window.

@@ -32,6 +32,7 @@ final class LibraryViewModel {
     /// Everything that requires asking the database again. The window reloads when this changes.
     struct ReloadKey: Equatable {
         let revision: Int
+        let processingRevision: Int
         let refreshCount: Int
         let isPreviewing: Bool
         let filter: LibraryFilter
@@ -72,6 +73,8 @@ final class LibraryViewModel {
     @ObservationIgnored private var lastOperation: Task<Void, Never>?
 
     @ObservationIgnored let service: LibraryService?
+    /// Read for status and progress, which change while the window is open.
+    @ObservationIgnored let processing: ProcessingCoordinator?
     let previewData: LibraryPreviewData
     private let fixedNow: Date?
     let calendar: Calendar
@@ -79,10 +82,12 @@ final class LibraryViewModel {
     /// The real library. A `previewScenario` starts on sample data instead, until `endPreview()`.
     init(
         service: LibraryService,
+        processing: ProcessingCoordinator? = nil,
         previewScenario: LibraryPreviewScenario? = nil,
         calendar: Calendar = .current
     ) {
         self.service = service
+        self.processing = processing
         previewData = .sample()
         fixedNow = nil
         self.calendar = calendar
@@ -101,6 +106,7 @@ final class LibraryViewModel {
         calendar: Calendar = .current
     ) {
         service = nil
+        processing = nil
         self.previewData = previewData
         fixedNow = now
         self.calendar = calendar
@@ -114,6 +120,7 @@ final class LibraryViewModel {
     var reloadKey: ReloadKey {
         ReloadKey(
             revision: service?.revision ?? 0,
+            processingRevision: processing?.revision ?? 0,
             refreshCount: refreshCount,
             isPreviewing: isPreviewing,
             filter: filter,
@@ -125,7 +132,7 @@ final class LibraryViewModel {
     /// Recordings in the selected sidebar section, in the chosen order. When live, the database has done both.
     var visibleItems: [LibraryItem] {
         guard isPreviewing else {
-            return items
+            return items.map(withMeasuredProgress)
         }
         let filtered = items.filter { filter.includes($0, now: now, calendar: calendar) }
         return filtered.sorted { first, second in
@@ -180,7 +187,7 @@ final class LibraryViewModel {
         isPreviewing && isSearching ? nil : selectedItem
     }
 
-    /// The processing queue exists only in the design so far.
+    /// The note about pausing the queue belongs to the design: real jobs are stopped one at a time.
     var showsProcessingNote: Bool {
         isPreviewing && filter == .processing && !isSearching
     }
@@ -200,7 +207,7 @@ final class LibraryViewModel {
             switch item.status {
             case .transcribing: transcribing += 1
             case .indexing: indexing += 1
-            case .ready, .recorded, .failed, .missing: break
+            case .ready, .pending, .recorded, .failed, .missing: break
             }
         }
         return (transcribing, indexing)
@@ -236,6 +243,16 @@ final class LibraryViewModel {
 
     var trimmedSearchText: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Progress changes too often to go through the database, so it joins the stored status here.
+    private func withMeasuredProgress(_ item: LibraryItem) -> LibraryItem {
+        guard case .transcribing = item.status, let fraction = processing?.progress[item.id] else {
+            return item
+        }
+        var measured = item
+        measured.status = .transcribing(progress: fraction)
+        return measured
     }
 
     private var previewContent: Content {

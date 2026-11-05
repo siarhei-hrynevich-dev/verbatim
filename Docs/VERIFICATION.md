@@ -1,5 +1,35 @@
 # Verification
 
+## Transcription
+
+Checked on 2026-11-04 on macOS 15 (Darwin 24.6.0, Mac16,12) with Xcode 26.3, in addition to `make check`.
+
+**Real recognition**, with `WhisperEndToEndTests` driving the real coordinator, database, Library, file store, decoder, `WhisperKit` and `AVPlaybackService` in a temporary folder, using a copy of an installed Tiny model and speech from `say` written to QuickTime files with the Recorder's named tracks:
+
+- A speech recording became the expected text, language `en`, with no special tokens, and all three files. New objects on the same disk read the same transcript without a model. A Viewer on the real player showed the lines, and selecting one landed on its start and highlighted it. Re-transcribing replaced it.
+- Two tracks, the second starting 8 s later, kept their sources, and the same words came out 8.000 s apart (0.020 s and 8.020 s).
+- Speech after 6 s of quiet noise started at 6.000 s. This and the previous check found that without word timestamps and silence trimming a first segment starts at 0.
+- About 90 s of repeated speech across chunks: chronological, no overlaps within the source, every repeat heard once.
+- Two hours of audio: 7,192 s in 446 s, about 16 times real time on Tiny, with 986 segments. Memory rose from 89 MB to a peak of 216 MB.
+- An explicit language, a model folder with no files (`modelUnavailable`), and cancelling followed by another run.
+
+**The running app**, an unsigned Debug build with a temporary home folder holding a copy of a real library: it launched, the database had the new tables, recordings stayed `recorded`, no job started and no model was loaded.
+
+Found along the way and fixed:
+
+- Two connections opening a new database at once failed with “database is locked”, because switching to WAL ignores the busy timeout. Opening is now serialized, and the test passed 25 times in a row.
+- Test runs host the real app, so resuming the queue at launch opened the real library in tests. It now stays shut in a test host, confirmed by the file's hash and timestamps across a full test run.
+- Whisper's first segment could start seconds before the speech, as above.
+
+### Not verified
+
+- **Clicking through the windows.** Nothing in this session could operate the UI. Transcribe, Retry, Re-transcribe, Cancel, the Export save panel, copying, the language menu, scrolling to pause following, and how the states look have not been used by hand. The same operations ran beneath the views as described above.
+- **A recording made with real capture through to a transcript.** Files came from a test writer with the same track layout, and the job scheduling from a finished recording ran with faked capture. Real microphone and system audio, with their real timing differences, have not been through it.
+- **Recording priority with real hardware**, meaning how long a running prediction overlaps with capture. Stopping and restarting were tested with the engine replaced.
+- **A signed, sandboxed build**, including Core ML loading models from the container and writing files into a custom recordings folder.
+- **Models other than Tiny.** Large v3 Turbo has not been run. Whether it reports word timestamps decides how exact its segment starts are.
+- **Real multilingual speech.** Only synthetic English was used. Detecting another language and code-switching have not been checked.
+
 ## Settings and speech models
 
 Checked on 2026-11-04 on macOS 15 (Darwin 24.6.0, Mac16,12) with Xcode 26.3 and Swift 6.2.4, in addition to `make check` (415 tests, repeated four times without a failure).

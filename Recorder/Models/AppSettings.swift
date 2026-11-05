@@ -12,6 +12,7 @@ struct AppSettings: Equatable, Sendable {
     var showsMenuBarIcon = true
     var opensRecorderOnDockClick = true
     var closeBehavior = CloseBehavior.keepRunning
+    var transcriptionLanguage = TranscriptionLanguage.automatic
 }
 
 /// Whether the app opens at login. The system owns this, so it is read back rather than stored.

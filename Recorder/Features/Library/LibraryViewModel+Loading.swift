@@ -94,7 +94,13 @@ extension LibraryViewModel {
         lastInspections = inspections
         recordings = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
         items = fetched.map {
-            LibraryItem($0, inspection: inspections[$0.id], recordingsFolder: recordingsFolder)
+            LibraryItem(
+                $0,
+                inspection: inspections[$0.id],
+                recordingsFolder: recordingsFolder,
+                job: processing?.job(for: $0.id),
+                isProcessingAvailable: processing != nil
+            )
         }
         if let selectedItemID, recordings[selectedItemID] == nil {
             self.selectedItemID = nil

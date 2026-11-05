@@ -204,7 +204,12 @@ struct LibraryWindowView: View {
         case .openRecordingFolder: viewModel.openFolder(of: item.id)
         case .locateFile: viewModel.requestLocate(item.id)
         case .rename: viewModel.requestRename(item.id)
-        case .retryProcessing: viewModel.startProcessing(item.id)
+        case .transcription:
+            if item.isProcessing {
+                viewModel.cancelProcessing(item.id)
+            } else {
+                viewModel.startProcessing(item.id)
+            }
         case .removeFromLibrary: removeFromLibrary(item.id)
         case .deleteRecording: viewModel.requestDeletion(of: item.id)
         }

@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The transcript panel before a transcript exists. Real recordings say so plainly, since nothing can make one yet.
-/// Design scenarios also show processing with progress, failed with Retry, and not processed with Generate Transcript.
-/// Playback works in every case.
+/// The transcript panel in design scenarios: processing with progress, failed with Retry, and not processed with
+/// Generate Transcript. Also says plainly when nothing is connected that can make a transcript. Real recordings use
+/// `ViewerTranscriptStatusView`. Playback works in every case.
 struct ViewerTranscriptEmptyState: View {
     let viewModel: ViewerViewModel
     let actions: ViewerWindowActions

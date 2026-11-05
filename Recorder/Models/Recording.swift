@@ -1,9 +1,11 @@
 import Foundation
 
-/// Metadata only; media files and processing jobs will be persisted separately.
+/// Metadata only; media files and processing jobs are persisted separately.
 struct Recording: Identifiable, Codable, Equatable, Sendable {
+    /// What the Library's queries filter on. `TranscriptionJob` is the authority while a job exists; its repository
+    /// keeps this in step.
     enum ProcessingStatus: String, Codable, CaseIterable, Sendable {
-        /// Saved with no processing started: the neutral state of every recording until a processing queue exists.
+        /// Saved with no processing started.
         case recorded
         case pending
         case transcribing

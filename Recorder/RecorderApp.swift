@@ -54,11 +54,13 @@ struct RecorderApp: App {
         .restorationBehavior(.disabled)
 
         Window("Viewer", id: ViewerWindowView.windowID) {
-            // Export and processing control are not connected yet.
             ViewerWindowView(
                 viewModel: appDelegate.viewerViewModel,
                 accent: accent,
-                actions: ViewerWindowActions(backToLibrary: navigator.showLibrary),
+                actions: ViewerWindowActions(
+                    backToLibrary: navigator.showLibrary,
+                    openSettings: navigator.showSettings
+                ),
                 videoSurface: appDelegate.viewerVideoSurface
             )
             .installsNavigation(into: navigator)

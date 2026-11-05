@@ -61,7 +61,7 @@ struct RecordingMetadata: Codable, Equatable, Sendable {
     let audioSources: [AudioSourceKind]
     let fileSizeBytes: Int64
     let completion: Completion
-    /// Read by the future processing queue, which is the integration point for scheduling transcription.
+    /// The Recorder's “Transcribe when recording ends” choice, as it stood for this recording.
     let transcriptionRequested: Bool
 
     static func defaultTitle(createdAt: Date) -> String {

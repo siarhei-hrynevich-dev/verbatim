@@ -36,7 +36,7 @@ The Recorder window records for real. Screen, window and audio-only recording, p
 
 **Metadata.** `recording.json` is a sidecar beside the media, behind the `RecordingMetadataStore` contract: a snapshot from when the recording finished, including a note when it did not finish. Nothing reads it yet, and renaming does not update it. The Library's database is the source of truth.
 
-**Automatic transcription.** No processing queue exists, so no job is created. The toggle is persisted, and each recording's metadata stores `transcriptionRequested` with the neutral status `recorded`. When a queue exists, schedule from `RecordingCoordinator.saveCompleted`, after the media is safe.
+**Automatic transcription.** The toggle is captured in the recording's configuration and stored as `transcriptionRequested`. `RecordingCoordinator.saveCompleted` queues a job once the media is safe and has its Library entry, unless the recording has no audio.
 
 **Live levels.** While recording, the session reports levels. In the Ready state, `LevelPreviewController` runs audio capture only while the setup screen is showing in the active app, and only for sources that are enabled and already permitted. macOS shows its microphone and screen recording indicators during that time.
 
@@ -68,7 +68,7 @@ The Recorder window records for real. Screen, window and audio-only recording, p
 
 **Search and sort.** Search looks across the library, like the design's, at titles and at dates such as `today`, `2026-11`, `Nov 4`. Filtering, sorting and sidebar counts are database queries. Newest, Oldest, Name and Duration come from the toolbar menu.
 
-**Status.** Every new recording is stored as `recorded`, shown as “Recorded”, with no Transcribe or Retry offered and no place in the Processing section, because no processing exists.
+**Status.** Every new recording is stored as `recorded`, shown as “Not Transcribed”. The status column then follows its transcription job; see [Transcription](#transcription-implemented).
 
 ## Player (implemented)
 
@@ -99,13 +99,13 @@ The Viewer window plays recordings from the Library. The player is shared by vid
 
 **Finder.** Show Recording in Finder, Open Recording Folder and Show Transcript in Finder go through `LibraryService`. The last is enabled only when a transcript file exists beside the media.
 
-**Transcript panel.** A real recording shows “No transcript available”, since nothing produces transcripts yet. No lines, waveforms or processing controls are simulated for one. Copy and Export stay disabled.
+**Transcript panel.** Shows the stored transcript; see [Transcription](#transcription-implemented). No waveforms are drawn for real recordings.
 
 **Full screen.** The whole window enters native full screen, including the transcript panel.
 
 ## Speech models (implemented)
 
-The AI Models tab downloads, verifies, selects and removes Whisper models. Nothing transcribes with them yet.
+The AI Models tab downloads, verifies, selects and removes Whisper models, and chooses the transcription language.
 
 | Layer | Component | Responsibility |
 | --- | --- | --- |
@@ -146,6 +146,38 @@ The AI Models tab downloads, verifies, selects and removes Whisper models. Nothi
 
 **Limits.** Progress steps as described above. A download doesn't continue while the app isn't running, though it resumes on Retry. Large v3 Turbo is unavailable on M1, where WhisperKit lists only compressed Large variants not in this catalog.
 
+## Transcription (implemented)
+
+Offline transcription of recordings with an installed Whisper model. The design is in [ARCHITECTURE.md](ARCHITECTURE.md#transcription).
+
+| Layer | Component | Responsibility |
+| --- | --- | --- |
+| Presentation | `ViewerViewModel+Transcript`, `ViewerTranscriptStatusView`, `ViewerTranscriptPanel`, `LibraryItem`, `LibraryContextMenu`, `TranscriptionIssue` | Showing transcripts and job state, actions, error wording. |
+| Application | `ProcessingCoordinator` (with `+Running`), `TranscriptionContracts` | The queue and its state, one job's steps, the interfaces below. |
+| Domain | `Transcript`, `TranscriptionJob`, `TranscriptFormat` | Segments and their validation and order, job states, failures, TXT, SRT and JSON. |
+| Infrastructure | `WhisperTranscriptionService`, `RecordingAudioReader`, `SpeechChunker` | WhisperKit, decoding tracks, chunk boundaries. |
+| Infrastructure | `SQLiteTranscriptRepository`, `FileTranscriptStore` | Tables and transcript files. |
+
+**Starting.** Automatically as above, or manually: Transcribe, Retry Transcription and Re-transcribe in the Library, and Generate Transcript, Retry and Re-transcribe in the Viewer, from the transcript panel or the More menu. A request for a recording already queued or running is ignored. Jobs run one at a time in the order asked for.
+
+**Model and language.** The model selected in Settings, resolved when a job starts, after comparing models with the disk. It is held by a lease until the job ends, so it can't be removed meanwhile. Nothing is downloaded or switched: no usable model fails the job with a way to Settings. The language comes from Settings › AI Models and defaults to Automatic, which asks for detection explicitly and detects per chunk; the transcript records the language heard for longest.
+
+**Storage.** Schema version 2 adds `transcripts` (one per recording: model, model version, language, date), `transcript_segments` (position, start, end, text, source) and `processing_jobs` (state, attempts, model, failure). A transcript row exists only when complete, so its status is the job's. The model version is WhisperKit's variant name, such as `tiny`; the variant identifier in `model_id` carries the rest, since WhisperKit reports no revision. Replacing a transcript and saving a job are each one transaction, and saving a job also updates `recordings.processing_status`, which the Library's queries use.
+
+**Files.** `transcript.txt`, `transcript.srt` and `transcript.json` go beside the media, each written atomically, and are rendered from the stored transcript alone. In SRT, overlapping sources give overlapping cues in chronological order, labeled when there is more than one source, so the same transcript always gives the same file. A file that can't be written, as when access covers only the media, doesn't fail the job: the Viewer says so, and Export as… saves the same content anywhere.
+
+**Progress.** Audio finished out of all audio to transcribe, across tracks, which moves about every 30 seconds of audio. Preparing and saving are shown as stages without a percentage. Nothing is estimated from elapsed time.
+
+**Library.** Status shows Not Transcribed, Pending, Transcribing with progress, Ready or Failed with the reason in a tooltip, and updates without reloading by hand: state changes advance `revision`, and progress joins the stored status in the view model. The Processing section lists queued, running and failed recordings. A failed re-transcription shows Failed while the earlier transcript stays available.
+
+**Viewer.** Lines show the start time, source and text. Playback highlights the last line started; the panel redraws only when that changes, and rows are lazy. Selecting a line seeks to its start. Scrolling by hand pauses following, and Follow Playback resumes it. Without lines, the panel shows the job's real state, with Cancel, Retry or Generate Transcript. While a replacement runs or after it fails, a banner sits above the existing lines. Copy and Export work from the stored transcript. An open recording picks up a new transcript when its job completes.
+
+**Removing.** Remove from Library stops any job, and the transcript stays until the next launch, so Undo brings it back. Delete Recording also forgets the transcript at once, and its files go to the Trash with the recording.
+
+**Errors.** `TranscriptionFailure` names no model selected, model unavailable, model load failure, missing media, no audio, unsupported audio, decoding failure, recognition failure, insufficient disk space and persistence failure. `TranscriptionIssue` words them. Original media is never touched. Details go to OSLog under the `Transcription` category, and transcript text is never logged; WhisperKit's own logging is off.
+
+**Limits.** Speech played through speakers can be picked up by the microphone too, and then appears under both sources, because no echo cancellation is applied. A hole inside a track, as after audio is dropped during capture, is closed up by the AAC encoder when recording: the file has no record of it, and picture and sound can differ there, as they do in playback. Stopping waits for the current prediction, and a model load can't be stopped at all. A restart begins the job again. WhisperKit does not decode audio shorter than a second.
+
 ## Settings window (implemented)
 
 | Layer | Component | Responsibility |
@@ -162,7 +194,7 @@ The AI Models tab downloads, verifies, selects and removes Whisper models. Nothi
 
 **Semantic Search.** A static section saying it isn't available yet: no embedding model is installed and no index is built.
 
-**Left out because nothing backs them yet.** Notify When Processing Finishes, Transcription Language, Postpone on Battery Power, Check for Updates and its automatic toggle, moving existing recordings, Preview Cache, Search Index and Missing Recordings figures. They return as their features do.
+**Left out because nothing backs them yet.** Notify When Processing Finishes, Postpone on Battery Power, Check for Updates and its automatic toggle, moving existing recordings, Preview Cache, Search Index and Missing Recordings figures. They return as their features do.
 
 ## Windows (design scenarios)
 
@@ -193,7 +225,7 @@ Shared design tokens and reusable controls live in `Shared/Design` and `Shared/C
 
 Recording is a Codable, Sendable metadata value with an identifier, creation date, nonblank title, finite nonnegative duration, and processing status. `RecordingMetadata` adds its files, sources and completion, and `LibraryRecording` adds its media reference and size. Database rows are validated when read; the sidecar is not read, and its synthesized Codable provides round trips only.
 
-The app target links WhisperKit and SQLiteVecStore but does not instantiate either: `WhisperModelProvider` uses only WhisperKit's static model APIs and its Hub client. The Library uses the system `SQLite3` directly.
+The app target links WhisperKit and SQLiteVecStore. `WhisperModelProvider` uses only WhisperKit's static model APIs and its Hub client; `WhisperTranscriptionService` is the only thing that creates a `WhisperKit` instance, and SQLiteVecStore is not instantiated. The Library uses the system `SQLite3` directly.
 
 ## Tests
 
@@ -217,7 +249,13 @@ Swift Testing suites in `RecorderTests` cover:
 - The model lifecycle with a controllable provider: transitions, success, failures, duplicates, cancelling, disk space, recording priority (`ModelManagerTests`); selection, including the first model being selected, and removal (`ModelSelectionTests`); restarts, external changes, damaged and interrupted files, the offline catalog (`ModelManagerRecoveryTests`); state rules and the recommendation (`ModelInstallStateTests`).
 - The real file boundary on temporary folders laid out as WhisperKit's downloader leaves them: verification, hashes, partial files, what removal may touch, hostile identifiers and manifest paths; repository listings with the network replaced; error translation (`ModelFileStoreTests`).
 - Settings persistence, the registry file, preferences and bundle metadata (`SettingsPersistenceTests`), the models tab (`ModelSettingsViewModelTests`) and the live Settings view model and its scenarios (`SettingsViewModelTests`).
+- Transcript rules, job states and export formats (`TranscriptDomainTests`).
+- Transcripts and jobs on real databases: atomic replacement, restarts, status, orphans, migration (`SQLiteTranscriptRepositoryTests`).
+- The queue with inference replaced: lifecycle, duplicates, order, models (`ProcessingCoordinatorTests`), failures, cancelling, re-transcribing, leaving the Library (`ProcessingFailureTests`), restarts, recording priority, automatic queuing (`ProcessingRecoveryTests`).
+- The real decoder and chunker on media written for the test: layout, offsets, silence, bounded blocks, chunk order (`RecordingAudioReaderTests`).
+- The Viewer and Library on real jobs: display, highlight and seeking, following, export, status and actions (`TranscriptPresentationTests`).
+- Real recognition with a model on this Mac, off unless asked for, as described in the [README](../README.md#transcription) (`WhisperEndToEndTests`).
 
 ## Not implemented yet
 
-No transcription, embedding models, processing workers, transcripts or recovery of interrupted recordings exist yet. Speech models can be installed but nothing uses them. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.
+No embedding models, transcript search or recovery of interrupted recordings exist yet. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.

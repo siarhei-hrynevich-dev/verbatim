@@ -66,6 +66,22 @@ extension LibraryViewModel {
         }
     }
 
+    /// Queues a transcript for the recording: the first one, a retry, or a replacement of what it has. A design
+    /// scenario simulates it instead.
+    func startProcessing(_ id: LibraryItem.ID) {
+        contextMenuItemID = nil
+        guard !isPreviewing else {
+            startSampleProcessing(id)
+            return
+        }
+        processing?.enqueue(id)
+    }
+
+    func cancelProcessing(_ id: LibraryItem.ID) {
+        contextMenuItemID = nil
+        processing?.cancel(id)
+    }
+
     /// Takes the open panel's answer for the recording being located.
     func finishLocating(_ result: Result<URL, any Error>) {
         guard let id = locatingItemID else {

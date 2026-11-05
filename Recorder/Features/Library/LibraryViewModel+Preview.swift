@@ -3,12 +3,11 @@ import Foundation
 /// Design scenarios: sample recordings and simulated actions that touch nothing on disk.
 extension LibraryViewModel {
     /// Simulates starting transcription for a sample recording without a transcript or with failed processing.
-    func startProcessing(_ id: LibraryItem.ID) {
+    func startSampleProcessing(_ id: LibraryItem.ID) {
         guard let index = items.firstIndex(where: { $0.id == id }), items[index].canStartProcessing else {
             return
         }
         items[index].status = .transcribing(progress: Self.initialSampleProgress)
-        contextMenuItemID = nil
     }
 
     func apply(_ scenario: LibraryPreviewScenario) {

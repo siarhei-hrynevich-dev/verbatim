@@ -14,6 +14,8 @@ struct LibraryRecording: Identifiable, Equatable, Sendable {
     let captureMode: CaptureMode
     var media: MediaReference
     var fileSizeBytes: Int64
+    /// Read from the transcript store. A failed or running re-transcription leaves an existing transcript in place.
+    var hasTranscript = false
 
     var id: UUID {
         recording.id
@@ -45,7 +47,7 @@ struct RecordingQuery: Equatable, Sendable {
 }
 
 /// Whether a recording's media can be reached right now. Anything but `available` keeps the Library entry.
-enum MediaAvailability: Equatable, Sendable {
+enum MediaAvailability: String, Codable, Equatable, Sendable {
     case available
     /// Moved, renamed or deleted, and not found through its bookmark.
     case missing

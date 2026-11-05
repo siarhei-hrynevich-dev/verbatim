@@ -251,27 +251,29 @@ struct LibrarySchemaTests {
     @Test func laterMigrationsApplyToExistingDataInOrder() async throws {
         let recording = try environment.makeRecording()
         try await environment.makeRepository().insert(recording)
+        let latest = LibrarySchema.migrations.last?.version ?? 0
         let upgraded =
             LibrarySchema.migrations + [
                 SQLiteMigration(
-                    version: 3,
+                    version: latest + 2,
                     sql: "CREATE TABLE third (id INTEGER, second_id INTEGER REFERENCES second (id))"
                 ),
-                SQLiteMigration(version: 2, sql: "CREATE TABLE second (id INTEGER PRIMARY KEY)")
+                SQLiteMigration(version: latest + 1, sql: "CREATE TABLE second (id INTEGER PRIMARY KEY)")
             ]
 
         let repository = SQLiteRecordingRepository(databaseURL: environment.databaseURL, migrations: upgraded)
 
         #expect(try await repository.fetch(id: recording.id) == recording)
-        #expect(try version(of: environment.databaseURL) == 3)
+        #expect(try version(of: environment.databaseURL) == Int64(latest + 2))
     }
 
     @Test func aFailedMigrationRollsBackAndKeepsTheData() async throws {
         let recording = try environment.makeRecording()
         try await environment.makeRepository().insert(recording)
+        let latest = LibrarySchema.migrations.last?.version ?? 0
         let broken =
             LibrarySchema.migrations + [
-                SQLiteMigration(version: 2, sql: "CREATE TABLE half_done (id INTEGER); THIS IS NOT SQL;")
+                SQLiteMigration(version: latest + 1, sql: "CREATE TABLE half_done (id INTEGER); THIS IS NOT SQL;")
             ]
 
         let repository = SQLiteRecordingRepository(databaseURL: environment.databaseURL, migrations: broken)
@@ -284,7 +286,7 @@ struct LibrarySchemaTests {
             }
             return true
         }
-        #expect(try version(of: environment.databaseURL) == 1)
+        #expect(try version(of: environment.databaseURL) == Int64(latest))
         let tables = try SQLiteDatabase(url: environment.databaseURL)
             .query("SELECT name FROM sqlite_master WHERE name = 'half_done'")
         #expect(tables.isEmpty)

@@ -29,6 +29,7 @@ final class RecordingCoordinator {
     @ObservationIgnored private let destinations: any RecordingDestinationStore
     @ObservationIgnored private let metadataStore: any RecordingMetadataStore
     @ObservationIgnored private let library: any FinishedRecordingRegistry
+    @ObservationIgnored private let transcriptionScheduler: (any TranscriptionScheduling)?
     @ObservationIgnored private let now: @Sendable () -> Date
 
     /// The start or stop in progress. Lives as long as the coordinator, independent of any window.
@@ -54,6 +55,7 @@ final class RecordingCoordinator {
         destinations: any RecordingDestinationStore,
         metadataStore: any RecordingMetadataStore,
         library: any FinishedRecordingRegistry,
+        transcriptionScheduler: (any TranscriptionScheduling)? = nil,
         now: @escaping @Sendable () -> Date = { .now }
     ) {
         self.engine = engine
@@ -61,6 +63,7 @@ final class RecordingCoordinator {
         self.destinations = destinations
         self.metadataStore = metadataStore
         self.library = library
+        self.transcriptionScheduler = transcriptionScheduler
         self.now = now
     }
 
@@ -211,6 +214,41 @@ final class RecordingCoordinator {
         }
     }
 
+    private func finishLifecycle(with finalState: RecordingState) {
+        eventsTask?.cancel()
+        eventsTask = nil
+        pauseTask = nil
+        current = nil
+        activeRecording = nil
+        levels = .silent
+        transition(to: finalState)
+    }
+
+    // MARK: - Helpers
+
+    private func transition(to next: RecordingState) {
+        guard state.allowsTransition(to: next) else {
+            assertionFailure("Invalid recording transition from \(state) to \(next)")
+            Self.logger.fault("Invalid recording transition from \(String(describing: self.state))")
+            return
+        }
+        state = next
+    }
+
+    private static func startFailure(from error: any Error) -> RecordingFailure {
+        if let failure = error as? RecordingFailure {
+            return failure
+        }
+        logger.error("Could not start recording: \(String(describing: error))")
+        return .initializationFailed(detail: error.localizedDescription)
+    }
+
+    private static let logger = Logger(subsystem: "dev.local.Recorder", category: "Recording")
+}
+
+// MARK: - Saving
+
+extension RecordingCoordinator {
     /// The media is already safe here, so a failure to store its details is reported without touching it. The sidecar
     /// and the Library are independent: one failing does not stop the other.
     private func saveCompleted(_ recording: CurrentRecording, media: CapturedMedia) async -> RecordingOutcome {
@@ -224,6 +262,10 @@ final class RecordingCoordinator {
         }
         do {
             try await library.addFinishedRecording(metadata, destination: recording.destination)
+            // The media is safe and has an entry. The job waits its turn until this recording has fully ended.
+            if metadata.transcriptionRequested, !media.audioSources.isEmpty {
+                transcriptionScheduler?.enqueueTranscription(of: recording.id)
+            }
         } catch {
             Self.logger.error("Could not add a recording to the Library: \(String(describing: error))")
             metadataErrorDetail = metadataErrorDetail ?? error.localizedDescription
@@ -272,37 +314,6 @@ final class RecordingCoordinator {
             Self.logger.error("Could not save metadata for an incomplete recording: \(String(describing: error))")
         }
     }
-
-    private func finishLifecycle(with finalState: RecordingState) {
-        eventsTask?.cancel()
-        eventsTask = nil
-        pauseTask = nil
-        current = nil
-        activeRecording = nil
-        levels = .silent
-        transition(to: finalState)
-    }
-
-    // MARK: - Helpers
-
-    private func transition(to next: RecordingState) {
-        guard state.allowsTransition(to: next) else {
-            assertionFailure("Invalid recording transition from \(state) to \(next)")
-            Self.logger.fault("Invalid recording transition from \(String(describing: self.state))")
-            return
-        }
-        state = next
-    }
-
-    private static func startFailure(from error: any Error) -> RecordingFailure {
-        if let failure = error as? RecordingFailure {
-            return failure
-        }
-        logger.error("Could not start recording: \(String(describing: error))")
-        return .initializationFailed(detail: error.localizedDescription)
-    }
-
-    private static let logger = Logger(subsystem: "dev.local.Recorder", category: "Recording")
 }
 
 // MARK: - Session events

@@ -8,16 +8,16 @@ struct ViewerRecording: Equatable, Sendable {
         case processing(progress: Double)
         /// Processing stopped `stoppedAt` seconds into the recording; the media itself is intact.
         case failed(stoppedAt: TimeInterval)
-        /// Recorded with automatic transcription off.
+        /// No transcript exists yet.
         case notProcessed
-        /// No transcript exists and nothing can make one yet: the state of every real recording so far.
+        /// No transcript exists and nothing is connected that can make one.
         case unavailable
     }
 
     let item: LibraryItem
-    let transcript: [TranscriptLine]
+    var transcript: [TranscriptLine]
     var transcriptState: TranscriptState
-    let language: String
+    var language: String
 
     var hasTranscript: Bool {
         transcriptState == .ready
@@ -38,6 +38,8 @@ struct TranscriptLine: Identifiable, Equatable, Sendable {
         /// The microphone track.
         case you
         case systemAudio
+        /// The tracks could not be told apart.
+        case unknown
     }
 
     let id: Int
@@ -51,6 +53,31 @@ extension TranscriptLine.Speaker {
         switch self {
         case .you: String(localized: "You")
         case .systemAudio: String(localized: "System Audio")
+        case .unknown: String(localized: "Unknown")
         }
     }
+
+    init(_ source: TranscriptSource) {
+        switch source {
+        case .microphone: self = .you
+        case .systemAudio: self = .systemAudio
+        case .unknown: self = .unknown
+        }
+    }
+}
+
+/// What a real recording's transcription is doing right now, whether or not a transcript exists meanwhile.
+enum ViewerTranscriptActivity: Equatable, Sendable {
+    enum Stage: Equatable, Sendable {
+        case preparingModel
+        /// `progress` is measured, from 0 to 1.
+        case processingAudio(progress: Double?)
+        case savingTranscript
+    }
+
+    case queued
+    case running(Stage)
+    /// Asked to stop, and on its way to a point where it can.
+    case stopping
+    case failed(TranscriptionIssue)
 }

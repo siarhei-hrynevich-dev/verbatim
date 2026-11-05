@@ -13,7 +13,8 @@ struct LibraryContextMenu: View {
         case openRecordingFolder
         case locateFile
         case rename
-        case retryProcessing
+        /// Starts, retries, repeats or stops transcribing, as the recording's state calls for.
+        case transcription
         case removeFromLibrary
         case deleteRecording
     }
@@ -71,7 +72,7 @@ struct LibraryContextMenu: View {
         } label: {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(command.title)
+                    Text(command.title(for: item))
                         .fontWeight(command.isDefault ? .semibold : .regular)
                     if let subtitle = command.subtitle {
                         Text(subtitle)
@@ -143,14 +144,14 @@ struct LibraryContextMenu: View {
             [.openRecording, .openTranscript],
             item.isMissing
                 ? [.locateFile, .showInFinder, .openRecordingFolder] : [.showInFinder, .openRecordingFolder],
-            [.rename, .retryProcessing],
+            [.rename, .transcription],
             [.removeFromLibrary, .deleteRecording]
         ]
     }
 }
 
 extension LibraryContextMenu.Command {
-    var title: LocalizedStringKey {
+    func title(for item: LibraryItem) -> LocalizedStringKey {
         switch self {
         case .openRecording: "Open Recording"
         case .openTranscript: "Open Transcript"
@@ -158,9 +159,20 @@ extension LibraryContextMenu.Command {
         case .openRecordingFolder: "Open Recording Folder"
         case .locateFile: "Locate File…"
         case .rename: "Rename…"
-        case .retryProcessing: "Retry Processing"
+        case .transcription: Self.transcriptionTitle(for: item)
         case .removeFromLibrary: "Remove from Library"
         case .deleteRecording: "Delete Recording…"
+        }
+    }
+
+    private static func transcriptionTitle(for item: LibraryItem) -> LocalizedStringKey {
+        if item.isProcessing {
+            return "Cancel Transcription"
+        }
+        switch item.status {
+        case .failed: return "Retry Transcription"
+        case .ready: return "Re-transcribe"
+        default: return "Generate Transcript"
         }
     }
 
@@ -194,8 +206,8 @@ extension LibraryContextMenu.Command {
 
     func isEnabled(for item: LibraryItem) -> Bool {
         switch self {
-        case .openTranscript: item.status == .ready
-        case .retryProcessing: item.canStartProcessing
+        case .openTranscript: item.hasTranscript && !item.isMissing
+        case .transcription: item.canStartProcessing || item.canRetranscribe || item.isProcessing
         // These need the media, which is what's missing.
         case .openRecording, .showInFinder, .openRecordingFolder, .deleteRecording: !item.isMissing
         case .locateFile, .rename, .removeFromLibrary: true

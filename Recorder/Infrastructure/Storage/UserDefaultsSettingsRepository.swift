@@ -8,6 +8,7 @@ struct UserDefaultsSettingsRepository: SettingsRepository {
         static let opensRecorderOnDockClick = "settings.opensRecorderOnDockClick"
         static let closeBehavior = "settings.closeBehavior"
         static let selectedModelID = "settings.selectedModelID"
+        static let transcriptionLanguage = "settings.transcriptionLanguage"
     }
 
     /// UserDefaults is documented as thread-safe, but is not marked Sendable.
@@ -24,6 +25,9 @@ struct UserDefaultsSettingsRepository: SettingsRepository {
         if let behavior = defaults.string(forKey: Key.closeBehavior).flatMap(CloseBehavior.init) {
             settings.closeBehavior = behavior
         }
+        settings.transcriptionLanguage = TranscriptionLanguage(
+            storedCode: defaults.string(forKey: Key.transcriptionLanguage)
+        )
         return settings
     }
 
@@ -31,6 +35,7 @@ struct UserDefaultsSettingsRepository: SettingsRepository {
         defaults.set(settings.showsMenuBarIcon, forKey: Key.showsMenuBarIcon)
         defaults.set(settings.opensRecorderOnDockClick, forKey: Key.opensRecorderOnDockClick)
         defaults.set(settings.closeBehavior.rawValue, forKey: Key.closeBehavior)
+        defaults.set(settings.transcriptionLanguage.code, forKey: Key.transcriptionLanguage)
     }
 
     func loadSelectedModelID() -> SpeechModel.ID? {

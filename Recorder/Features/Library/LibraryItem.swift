@@ -10,6 +10,8 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
 
     enum Status: Equatable, Sendable {
         case ready
+        /// Waiting its turn in the queue.
+        case pending
         /// `progress` is a fraction from 0 to 1.
         case transcribing(progress: Double)
         /// `progress` is a fraction from 0 to 1.
@@ -32,8 +34,14 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
     let folderName: String
     /// Where the recording really is, for one the Library tracks on disk. Sample recordings have no location.
     var location: Location?
-    /// Whether transcription exists to start. Processing is not implemented for real recordings.
+    /// Whether transcription can be started from here. Off for an entry with no transcription behind it.
     var isProcessingAvailable = true
+    /// A transcript is stored, whatever the latest job did: only a finished replacement ever touches it.
+    var hasStoredTranscript = false
+    /// Why the latest transcription failed, as the status explains it.
+    var failureIssue: TranscriptionIssue?
+    /// Whether the transcript can be made again. Sample recordings don't offer it.
+    var offersRetranscription = false
 
     /// A tracked recording's folder and files as last inspected.
     struct Location: Equatable, Sendable {
@@ -62,7 +70,7 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
     var hasTranscript: Bool {
         switch status {
         case .ready, .indexing: true
-        case .transcribing, .recorded, .failed, .missing: false
+        case .pending, .transcribing, .recorded, .failed, .missing: hasStoredTranscript
         }
     }
 
@@ -70,13 +78,25 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
     var processingProgress: Double? {
         switch status {
         case .transcribing(let progress), .indexing(let progress): progress
-        case .ready, .recorded, .failed, .missing: nil
+        case .ready, .pending, .recorded, .failed, .missing: nil
+        }
+    }
+
+    /// Queued or running, which offers stopping instead of starting.
+    var isProcessing: Bool {
+        switch status {
+        case .pending, .transcribing: offersRetranscription
+        case .ready, .indexing, .recorded, .failed, .missing: false
         }
     }
 
     /// Whether transcription can be started: the recording has no transcript yet, or processing failed.
     var canStartProcessing: Bool {
         isProcessingAvailable && (status == .recorded || status == .failed)
+    }
+
+    var canRetranscribe: Bool {
+        offersRetranscription && status == .ready
     }
 
     /// The fix offered inline next to the status, if any.
@@ -94,8 +114,15 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
 }
 
 extension LibraryItem {
-    /// `inspection` is `nil` until the file system has been checked; the recording shows as present until then.
-    init(_ recording: LibraryRecording, inspection: RecordingFileInspection?, recordingsFolder: URL?) {
+    /// `inspection` is `nil` until the file system has been checked; the recording shows as present until then. A job,
+    /// when there is one, knows more than the stored status. `isProcessingAvailable` is off without a queue to use.
+    init(
+        _ recording: LibraryRecording,
+        inspection: RecordingFileInspection?,
+        recordingsFolder: URL?,
+        job: TranscriptionJob? = nil,
+        isProcessingAvailable: Bool = false
+    ) {
         let media = inspection?.media ?? recording.media
         let folder = media.url.deletingLastPathComponent()
         let isInRecordingsFolder = folder.deletingLastPathComponent().path() == recordingsFolder?.path()
@@ -107,7 +134,7 @@ extension LibraryItem {
             duration: recording.recording.duration,
             sizeBytes: recording.fileSizeBytes,
             kind: Kind(recording.captureMode),
-            status: availability == .available ? Status(recording.recording.processingStatus) : .missing,
+            status: availability == .available ? Status(recording.recording.processingStatus, job: job) : .missing,
             folderName: folder.lastPathComponent,
             location: Location(
                 folderPath: isInRecordingsFolder ? nil : folder.path(percentEncoded: false),
@@ -116,7 +143,10 @@ extension LibraryItem {
                 trashesFolder: inspection?.trashesFolder ?? false,
                 unavailability: availability == .available ? nil : availability
             ),
-            isProcessingAvailable: false
+            isProcessingAvailable: isProcessingAvailable,
+            hasStoredTranscript: recording.hasTranscript,
+            failureIssue: job?.failure.map(TranscriptionIssue.init),
+            offersRetranscription: isProcessingAvailable
         )
     }
 }
@@ -132,10 +162,24 @@ extension LibraryItem.Kind {
 }
 
 extension LibraryItem.Status {
-    /// `pending` means queued, and no queue exists yet, so it reads as simply recorded.
-    fileprivate init(_ status: Recording.ProcessingStatus) {
+    fileprivate init(_ status: Recording.ProcessingStatus, job: TranscriptionJob?) {
+        switch job?.state {
+        case .pending:
+            self = .pending
+            return
+        case .preparing, .transcribing, .saving:
+            self = .transcribing(progress: 0)
+            return
+        case .failed:
+            self = .failed
+            return
+        case .completed, .cancelled, nil:
+            break
+        }
+        // Without a queue running, a job that says it is underway isn't, and a stored one will be recovered at launch.
         switch status {
-        case .recorded, .pending: self = .recorded
+        case .recorded: self = .recorded
+        case .pending: self = .pending
         case .transcribing: self = .transcribing(progress: 0)
         case .indexing: self = .indexing(progress: 0)
         case .ready: self = .ready

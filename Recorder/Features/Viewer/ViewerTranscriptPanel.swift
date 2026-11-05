@@ -12,11 +12,14 @@ struct ViewerTranscriptPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            if hasTranscript {
+            if hasTranscript, !viewModel.lines.isEmpty {
+                ViewerTranscriptActivityBanner(viewModel: viewModel, actions: actions)
                 lineList
                 footer
-            } else {
+            } else if viewModel.isPreviewing || viewModel.processing == nil {
                 ViewerTranscriptEmptyState(viewModel: viewModel, actions: actions)
+            } else {
+                ViewerTranscriptStatusView(viewModel: viewModel, actions: actions)
             }
         }
         .background(VerbatimColor.transcriptBackground)
@@ -34,8 +37,8 @@ struct ViewerTranscriptPanel: View {
                 Text("Transcript")
                     .font(.system(size: 13, weight: .bold))
                     .accessibilityAddTraits(.isHeader)
-                if hasTranscript {
-                    Text("\(viewModel.lines.count) lines · \(viewModel.recording?.language ?? "")")
+                if hasTranscript, !viewModel.lines.isEmpty {
+                    Text(headerDetail)
                         .font(.system(size: 11))
                         .foregroundStyle(VerbatimColor.secondaryText)
                 }
@@ -45,11 +48,11 @@ struct ViewerTranscriptPanel: View {
                         .frame(width: 24, height: 22)
                 }
                 .buttonStyle(PanelIconButtonStyle())
-                .disabled(!hasTranscript)
+                .disabled(viewModel.lines.isEmpty)
                 .help("Copy Entire Transcript")
                 .accessibilityLabel("Copy Entire Transcript")
             }
-            if hasTranscript {
+            if hasTranscript, !viewModel.lines.isEmpty {
                 TranscriptSearchBar(viewModel: viewModel)
             }
         }
@@ -58,17 +61,26 @@ struct ViewerTranscriptPanel: View {
         .padding(.bottom, 10)
     }
 
+    private var headerDetail: String {
+        let language = viewModel.recording?.language ?? ""
+        return language.isEmpty ? "\(viewModel.lines.count) lines" : "\(viewModel.lines.count) lines · \(language)"
+    }
+
+    /// Reads the highlighted line and matches once for the whole list: rows are created lazily, and this redraws only
+    /// when another line becomes active, not for every playback report.
     private var lineList: some View {
-        ScrollViewReader { proxy in
+        let activeLineIndex = viewModel.activeLineIndex
+        let currentMatchLineIndex = viewModel.currentMatchLineIndex
+        return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(viewModel.lines.enumerated()), id: \.element.id) { index, line in
                         TranscriptLineRow(
                             line: line,
-                            isActive: index == viewModel.activeLineIndex,
+                            isActive: index == activeLineIndex,
                             isPlaying: viewModel.isPlaying,
                             query: viewModel.trimmedQuery,
-                            isCurrentMatch: index == viewModel.currentMatchLineIndex
+                            isCurrentMatch: index == currentMatchLineIndex
                         ) {
                             viewModel.seekToLine(at: index)
                         }

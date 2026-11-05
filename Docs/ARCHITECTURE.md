@@ -8,7 +8,7 @@ Presentation depends on Application and Domain; Application depends on Domain. I
 
 ## Current state
 
-What exists in the code today (recording, windows, simulated state, App integration, models, tests) is described in [Implementation Status](IMPLEMENTATION.md). This document describes the target architecture; sections marked "planned" are intended future behavior, not current behavior. Recording capture, its lifecycle, media finalization, the recording library's SQLite persistence, media playback and speech model management are implemented; processing, transcripts and vector indexes are not.
+What exists in the code today (recording, windows, simulated state, App integration, models, tests) is described in [Implementation Status](IMPLEMENTATION.md). This document describes the target architecture; sections marked "planned" are intended future behavior, not current behavior. Recording capture, its lifecycle, media finalization, the recording library's SQLite persistence, media playback, speech model management and offline transcription are implemented; embeddings and vector indexes are not.
 
 ## Feature and service boundaries (planned)
 
@@ -34,10 +34,12 @@ Services will own these responsibilities:
 | ModelRegistryStore | Application contract (implemented by `JSONModelRegistryStore`): what was installed, for comparing with the disk |
 | SettingsRepository | Application contract (implemented by `UserDefaultsSettingsRepository`): app preferences and the selected model |
 | AppPreferences | Application state (implemented): the owner of app behavior preferences, observed by Settings, the menu bar item and the app delegate |
-| TranscriptionService | Infrastructure adapter: on-demand offline WhisperKit processing and timestamped transcript segments. Gets its model from `ModelManager` |
+| TranscriptionService | Application contract (implemented by `WhisperTranscriptionService`): on-demand offline recognition of local media. Takes an already resolved model; knows nothing about jobs or storage |
+| TranscriptRepository, ProcessingJobRepository | Application contracts (implemented by `SQLiteTranscriptRepository`): finished transcripts and the durable job queue |
+| TranscriptFileStore | Application contract (implemented by `FileTranscriptStore`): the transcript files beside a recording's media |
 | EmbeddingService | Infrastructure adapter: on-demand Core ML inference, model load/unload, replaceable embedding implementation |
-| PersistenceService | Infrastructure implementation: transcript segments, FTS5 and sqlite-vec indexes, in the application database or beside it |
-| ProcessingCoordinator | Application workflow: durable sequential jobs, resource arbitration, cancellation, retries and recovery through core contracts |
+| PersistenceService | Infrastructure implementation: FTS5 and sqlite-vec indexes, in the application database or beside it |
+| ProcessingCoordinator | Application workflow (implemented): the single owner of transcription jobs: durable sequential queue, recording priority, cancellation, retries and recovery |
 
 Application services orchestrate capture and processing through meaningful contracts owned by Application or Domain; infrastructure implements those contracts and keeps framework-specific types inside adapters. Domain owns business validation and state transition rules. Introduce protocols when an actual architectural boundary, substitution, or testing need appears. Native frameworks come from the SDK; import ScreenCaptureKit, AVFoundation, AVKit, CoreMedia, CoreAudio, CoreML, Accelerate, and AppKit only where required.
 
@@ -45,7 +47,7 @@ Application services orchestrate capture and processing through meaningful contr
 
 `ViewerViewModel` owns one playback session: from opening a recording by its identifier until the next one opens, the window closes or playback fails. It reads metadata and opens the media through `LibraryService`, which stays the only owner of both, and plays through `PlaybackService`, which keeps `AVPlayer` inside Infrastructure. `PlaybackState` in Domain states which transitions exist. App injects the one view tied to the concrete player, `AVPlayerSurface`, so that Presentation has no AVFoundation dependency.
 
-The contract's callback and `AVPlayer` are main-actor bound because the player drives on-screen rendering. A transcript needs nothing further from the engine: `PlaybackEvent.timeChanged`, `currentTime` and `seek(to:precision:)` are its timeline, and the view model already derives the active line and seeking to a line from `lines`. Loading real segments means filling `ViewerRecording.transcript` and setting its state to `ready`; the engine stays independent of WhisperKit and transcript storage.
+The contract's callback and `AVPlayer` are main-actor bound because the player drives on-screen rendering. A transcript needs nothing further from the engine: `PlaybackEvent.timeChanged`, `currentTime` and `seek(to:precision:)` are its timeline, and the engine stays independent of WhisperKit and transcript storage. `position` changes many times a second, so the transcript panel reads `activeLineIndex` instead, a binary search over the lines written only when the active line changes.
 
 ## Speech models
 
@@ -71,25 +73,29 @@ let config = WhisperKitConfig(
 
 Report a thrown error to the user instead of choosing another model: nothing switches or downloads on its own. The one automatic selection is the first model installed, when none is selected and no other model is installed. Resolving loads nothing. Load only for post-processing, never while recording; `ModelManager.isRecordingActive` reflects that. A file that imports both WhisperKit and `@testable Recorder` must write `Recorder.ModelManager`, because WhisperKit re-exports a type of the same name from ArgmaxCore; inside the app module the app's own wins. Embedding models will be a separate catalog when they exist; nothing generic was added for them in advance.
 
-## Recording and processing lifecycles (planned)
+## Transcription
 
-Recording performance takes priority. Before capture starts, cancel or suspend heavy post-processing and release AI model resources. During active recording, WhisperKit and embedding models must remain unloaded; vector indexing and heavy background jobs must not start. Resource arbitration belongs in the coordinator, with an explicit state transition that prevents races between recording and processing.
+`ProcessingCoordinator` is created in App and outlives every window. It runs on the main actor and changes state before any suspension, so a duplicate request is rejected by state; inference runs off the main actor in `WhisperTranscriptionService`, an actor. `TranscriptionJob.State` in Domain states which transitions exist: `pending → preparing → transcribing → saving → completed`, with `failed` and `cancelled`, and running jobs can return to `pending`. There is one job per recording, so retrying and re-transcribing reuse it.
 
-After recording stops:
+A job's steps are: check the model against the disk through `ModelManager` and take a lease, open the media through `LibraryService`, check disk space, recognize, assemble the result with `Transcript.assembled`, store it in one transaction, write the files, and only then complete. Nothing before the transaction changes anything, which is what makes stopping and restarting safe at any point.
 
-1. Finalize and close the media file successfully.
-2. Persist recording metadata and a durable processing job.
-3. Load WhisperKit on demand and transcribe.
-4. Persist timestamped transcript segments.
-5. Unload transcription resources, load the embedding model, and generate embeddings.
-6. Update the vector index and full-text index transactionally.
-7. Mark the recording ready and release model resources.
+**Why not `transcribe(audioPath:)`.** It reads through `AVAudioFile`, which sees one track of a QuickTime file and assumes audio is contiguous from zero. `RecordingAudioReader` instead decodes each track with `AVAssetReader` to 16 kHz mono, positioned by presentation time, and `SpeechChunker` applies the same rules as WhisperKit's incremental loading, with its public `VADAudioChunker`, before calling `transcribe(audioArray:)` for each chunk. This keeps memory bounded as incremental loading would, and writes no intermediate files. This is a deliberate deviation from preferring WhisperKit's incremental API, which is `AVAudioFile`-only.
 
-Checkpoints and idempotent stage writes must make interrupted jobs resumable or safely retryable. A failed or cancelled job must preserve the original media and expose actionable errors. Recover unfinished work on a later launch; a window closing must not cancel active recording.
+**Timeline.** Times are on the file's own timeline, which is the one `AVPlayer` plays. A track starting late is stored with an empty edit and decodes as silence from time 0. Chunks of digital silence are skipped and leading silence trimmed, because Whisper tends to begin its first segment at the start of what it is given, and word timestamps are on for the same reason. Tracks are transcribed independently and merged by `Transcript.assembled`. Tracks are told apart by the names the Recorder gives them; a file without those names is transcribed as one mix, labeled Unknown.
+
+**Recording priority.** `RecordingPriorityPolicy` calls `setRecordingActive`, which stops the running job and holds the queue from when a recording starts preparing until its media is safe. It never waits for inference, so capture cannot be delayed by it. The job returns to `pending`, the model is released as soon as inference returns, and the job restarts from the beginning when the recording ends. Task cancellation is checked between chunks and windows, and the decoder's callback ends its token loop early, but a running Core ML prediction or model load cannot be interrupted: until it returns, inference and capture can overlap briefly. Loading can take minutes the first time Core ML compiles a model.
+
+**Recovery.** A job found running at launch restarts from the beginning; chunk-level resume is not attempted. A failed or cancelled job leaves the media and any earlier transcript untouched.
+
+**Test host.** Unit tests run inside `Recorder.app`, which runs `AppDelegate`. Anything that touches user data at launch must stay out of tests, as `processing.start()` does through `isHostingTests`.
+
+## Embedding lifecycle (planned)
+
+During active recording, embedding models must remain unloaded, and vector indexing must not start. After a transcript is stored: unload transcription resources, load the embedding model, generate embeddings, update the vector and full-text indexes transactionally, and release model resources.
 
 ## Storage and models (planned)
 
-Recording metadata is implemented: the sandbox Application Support directory holds `Verbatim/Library.sqlite`, opened through the system `SQLite3` with versioned migrations (`LibrarySchema`). **Deviation:** app tables do not go through SQLiteVecStore, whose `VectorStore` freezes an embedding dimension into the file at creation, before any embedding model is chosen, and offers no migrations for app tables. SQLiteVecStore remains planned for sqlite-vec and FTS5, and its tables can share this file or sit beside it. New tables should be added as new migrations and refer to `recordings.id`. Durable jobs are planned the same way. Media is stored separately and referenced by stable identifier, path and security-scoped bookmark.
+Recording metadata is implemented: the sandbox Application Support directory holds `Verbatim/Library.sqlite`, opened through the system `SQLite3` with versioned migrations (`LibrarySchema`). **Deviation:** app tables do not go through SQLiteVecStore, whose `VectorStore` freezes an embedding dimension into the file at creation, before any embedding model is chosen, and offers no migrations for app tables. SQLiteVecStore remains planned for sqlite-vec and FTS5, and its tables can share this file or sit beside it. New tables should be added as new migrations and refer to `recordings.id`. Transcripts and jobs do so without a foreign key, because removing a recording can be undone and must bring its transcript back; `purgeOrphans` clears them at the next launch, and deleting to the Trash clears them at once. Repositories hold separate connections to the file, opened one at a time. Media is stored separately and referenced by stable identifier, path and security-scoped bookmark.
 
 The intended initial embedding model is multilingual-e5-small, likely converted to Core ML. Speech models are handled as described under [Speech models](#speech-models), and embedding models will follow the same rule: download or install one model only when the feature is explicitly used, with no weights bundled. Load on demand after capture ends, unload when idle or recording starts, and isolate inference behind an implementation that can later be replaced. Persist model identity, version, dimensions, and normalization policy with the index so a replacement triggers a safe reindex. WhisperKit likewise runs exclusively in post-processing and never initializes at startup.
 

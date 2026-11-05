@@ -35,7 +35,7 @@ struct ViewerPreviewData: Sendable {
         case .ready, .indexing, .missing: .ready
         case .transcribing(let progress): .processing(progress: progress)
         case .failed: .failed(stoppedAt: failurePosition)
-        case .recorded: .notProcessed
+        case .recorded, .pending: .notProcessed
         }
     }
 
