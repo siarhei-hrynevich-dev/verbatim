@@ -93,9 +93,9 @@ extension RecorderViewModel {
         transcribesWhenFinished = preferences.transcribesWhenFinished
     }
 
-    /// Runs the meters for the sources that are enabled and already permitted. It never prompts.
+    /// Runs the meters during a sound check, for the sources that are enabled and already permitted. It never prompts.
     func updateLevelPreview() {
-        guard isSetupVisible, phase == .ready, !preview.isActive else {
+        guard isCheckingSound, isSetupVisible, phase == .ready, !preview.isActive else {
             levelPreview.stop()
             return
         }
@@ -105,4 +105,33 @@ extension RecorderViewModel {
             capturesSystemAudio: isSystemAudioEnabled && permissions.hasScreenCaptureAccess()
         )
     }
+
+    /// Starts or ends the sound check that drives the meters.
+    func toggleSoundCheck() {
+        guard !isCheckingSound else {
+            endSoundCheck()
+            return
+        }
+        guard isSetupVisible, phase == .ready, !preview.isActive else {
+            return
+        }
+        isCheckingSound = true
+        updateLevelPreview()
+        soundCheckTimeout = Task { [weak self] in
+            try? await Task.sleep(for: Self.soundCheckDuration)
+            guard !Task.isCancelled else {
+                return
+            }
+            self?.endSoundCheck()
+        }
+    }
+
+    func endSoundCheck() {
+        soundCheckTimeout?.cancel()
+        soundCheckTimeout = nil
+        isCheckingSound = false
+        levelPreview.stop()
+    }
+
+    private static let soundCheckDuration = Duration.seconds(30)
 }

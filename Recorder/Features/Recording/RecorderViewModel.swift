@@ -48,6 +48,9 @@ final class RecorderViewModel {
     /// macOS only answers this when asked, so it is kept here for the callout to update when it changes.
     var isMicrophoneAccessDenied = false
     var isChoosingFolder = false
+    /// The meters listen to the microphone and system audio, which can switch Bluetooth headphones to their
+    /// low-quality headset mode, so they run only for a short check the user asks for.
+    var isCheckingSound = false
 
     var captureMode: CaptureMode { didSet { settingsDidChange(reloadsSources: true) } }
     var isMicrophoneEnabled: Bool { didSet { microphoneEnabledDidChange() } }
@@ -60,6 +63,7 @@ final class RecorderViewModel {
     /// Refreshes sources while the setup screen is on-screen. Cancelled when it goes away.
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored var isSetupVisible = false
+    @ObservationIgnored var soundCheckTimeout: Task<Void, Never>?
 
     init(dependencies: Dependencies) {
         self.dependencies = dependencies
@@ -166,7 +170,7 @@ final class RecorderViewModel {
             return
         }
         actionIssue = nil
-        levelPreview.stop()
+        endSoundCheck()
         coordinator.requestStart(makeConfiguration())
     }
 
@@ -264,7 +268,7 @@ final class RecorderViewModel {
         refreshTask?.cancel()
         refreshTask = nil
         guard isVisible else {
-            levelPreview.stop()
+            endSoundCheck()
             return
         }
         refreshTask = Task { [weak self] in

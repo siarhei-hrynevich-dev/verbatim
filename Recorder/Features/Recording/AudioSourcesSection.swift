@@ -44,7 +44,24 @@ struct AudioSourcesSection: View {
                     .toggleStyle(.verbatimSwitch)
             }
             .audioRowLayout()
+
+            GroupedDivider(leadingInset: 44)
+
+            soundCheckRow
         }
+    }
+
+    private var soundCheckRow: some View {
+        HStack(spacing: 10) {
+            Text(viewModel.isCheckingSound ? "Listening for 30 seconds" : "Meters are off while idle")
+                .font(.system(size: 12))
+                .foregroundStyle(VerbatimColor.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(viewModel.isCheckingSound ? "Stop Check" : "Check Sound", action: viewModel.toggleSoundCheck)
+                .buttonStyle(.verbatim(.secondary, size: .mini))
+                .disabled(!viewModel.isMicrophoneEnabled && !viewModel.isSystemAudioEnabled)
+        }
+        .audioRowLayout()
     }
 
     private var microphonePicker: some View {

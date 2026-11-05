@@ -6,6 +6,9 @@ struct RecorderSetupView: View {
     @Bindable var viewModel: RecorderViewModel
     let showLibrary: () -> Void
 
+    /// `.key` only while this window is the one the user is working in, not merely while the app is active.
+    @Environment(\.controlActiveState) private var controlActiveState
+
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: RecorderLayout.sectionSpacing) {
@@ -33,16 +36,14 @@ struct RecorderSetupView: View {
 
             footer
         }
-        .onAppear { viewModel.setSetupVisible(NSApp.isActive) }
+        // Meters listen to the microphone and system audio, so they run only while this window is in front.
+        // The Library, Viewer and Settings windows keep the app active but must not keep capture running.
+        .onChange(of: controlActiveState, initial: true) { _, state in
+            viewModel.setSetupVisible(state == .key)
+        }
         // Shows real sources even when the app opened in the background.
         .task { await viewModel.refresh() }
         .onDisappear { viewModel.setSetupVisible(false) }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            viewModel.setSetupVisible(true)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-            viewModel.setSetupVisible(false)
-        }
         .fileImporter(isPresented: $viewModel.isChoosingFolder, allowedContentTypes: [.folder]) { result in
             switch result {
             case .success(let url): viewModel.chooseFolder(url)
