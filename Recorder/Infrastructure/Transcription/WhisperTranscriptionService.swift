@@ -103,36 +103,93 @@ actor WhisperTranscriptionService: TranscriptionService {
         progress: inout AudioProgress
     ) async throws {
         let reader = try await RecordingAudioReader(url: request.mediaURL, input: input)
-        let options = Self.decodingOptions(for: request.language)
+        var session = InputSession(input: input, requestedLanguage: request.language.code)
         var chunker = SpeechChunker(
             windowSamples: model.featureExtractor.windowSamples ?? Constants.defaultWindowSamples
         )
 
         while let block = try reader.nextBlock() {
             try Task.checkCancellation()
-            for chunk in try await chunker.append(block) {
-                try await recognize(chunk, of: input, with: model, options: options, into: &collector)
-                progress.advance(input, toSample: chunk.startSample + chunk.samples.count)
+            try await handle(try await chunker.append(block), model, &session, &collector, &progress)
+        }
+        try await handle(try await chunker.finish(), model, &session, &collector, &progress)
+        // A short input may end before enough speech arrived to settle its language.
+        try await settleLanguage(model, &session, &collector, &progress)
+    }
+
+    /// Chunks wait until the language of this input is settled, then run in order.
+    private func handle(
+        _ chunks: [SpeechChunk],
+        _ model: WhisperKit,
+        _ session: inout InputSession,
+        _ collector: inout SpeechCollector,
+        _ progress: inout AudioProgress
+    ) async throws {
+        for chunk in chunks {
+            if session.isSettlingLanguage {
+                session.waiting.append(chunk)
+                if session.waitingSpeechCount >= Tuning.languageProbeChunks {
+                    try await settleLanguage(model, &session, &collector, &progress)
+                }
+            } else {
+                try await recognize(chunk, model, &session, &collector, &progress)
             }
         }
-        for chunk in try await chunker.finish() {
-            try await recognize(chunk, of: input, with: model, options: options, into: &collector)
-            progress.advance(input, toSample: chunk.startSample + chunk.samples.count)
+    }
+
+    /// Automatic detection decides once per input, from its first few stretches of speech, instead of once per chunk:
+    /// a short or quiet chunk is easily taken for another language, and the whole chunk then decodes in it.
+    private func settleLanguage(
+        _ model: WhisperKit,
+        _ session: inout InputSession,
+        _ collector: inout SpeechCollector,
+        _ progress: inout AudioProgress
+    ) async throws {
+        guard session.isSettlingLanguage else {
+            return
         }
+        session.language = try await detectLanguage(in: session.waiting, with: model)
+        session.isSettlingLanguage = false
+        let waiting = session.waiting
+        session.waiting = []
+        for chunk in waiting {
+            try await recognize(chunk, model, &session, &collector, &progress)
+        }
+    }
+
+    /// The language with the most probability across the chunks' speech. `nil` when nothing could be detected, which
+    /// leaves each chunk to detect its own language as before.
+    private func detectLanguage(in chunks: [SpeechChunk], with model: WhisperKit) async throws -> String? {
+        var totals: [String: Float] = [:]
+        for chunk in chunks where !chunk.isSilent {
+            try Task.checkCancellation()
+            do {
+                let detected = try await model.detectLangauge(audioArray: chunk.droppingLeadingSilence().samples)
+                for (language, probability) in detected.langProbs {
+                    totals[language, default: 0] += probability
+                }
+            } catch {
+                Self.logger.error("Language detection failed: \(String(describing: error), privacy: .public)")
+                return nil
+            }
+        }
+        return totals.max { ($0.value, $1.key) < ($1.value, $0.key) }?.key
     }
 
     private func recognize(
         _ chunk: SpeechChunk,
-        of input: RecordingAudioInput,
-        with model: WhisperKit,
-        options: DecodingOptions,
-        into collector: inout SpeechCollector
+        _ model: WhisperKit,
+        _ session: inout InputSession,
+        _ collector: inout SpeechCollector,
+        _ progress: inout AudioProgress
     ) async throws {
+        defer { progress.advance(session.input, toSample: chunk.startSample + chunk.samples.count) }
         try Task.checkCancellation()
         guard !chunk.isSilent else {
             return
         }
         let audio = chunk.droppingLeadingSilence()
+        let options = Self.decodingOptions(language: session.language)
         let stopFlag = OSAllocatedUnfairLock(initialState: false)
         let results: [TranscriptionResult]
         do {
@@ -153,28 +210,63 @@ actor WhisperTranscriptionService: TranscriptionService {
         try Task.checkCancellation()
         let chunkStart = TimeInterval(audio.startSample) / TimeInterval(AudioTimelineAssembler.sampleRate)
         for result in results {
-            collector.add(result, source: input.source, chunkStart: chunkStart)
+            collector.add(result, source: session.input.source, chunkStart: chunkStart)
         }
     }
 
-    /// Language detection is requested explicitly: WhisperKit's default options would decode as English. Special tokens
-    /// are left out of the text. Word timestamps cost a little time, but align each segment to its words: without them
-    /// a segment can start seconds before anyone speaks, which is where selecting that line would seek to.
-    private static func decodingOptions(for language: TranscriptionLanguage) -> DecodingOptions {
+    /// Detection happens before decoding, once per input, so decoding itself is told the language. With none known,
+    /// detection is requested explicitly: WhisperKit's default options would decode as English. Special tokens are
+    /// left out of the text. Word timestamps cost a little time, but align each segment to its words: without them a
+    /// segment can start seconds before anyone speaks, which is where selecting that line would seek to.
+    ///
+    /// Fallback is spelled out although these are WhisperKit's defaults: a window failing the thresholds is decoded
+    /// again at a higher temperature, which is what ends repeated or invented text.
+    private static func decodingOptions(language: String?) -> DecodingOptions {
         DecodingOptions(
             verbose: false,
             task: .transcribe,
-            language: language.code,
+            language: language,
+            temperature: 0,
+            temperatureIncrementOnFallback: 0.2,
+            temperatureFallbackCount: 5,
             usePrefillPrompt: true,
-            detectLanguage: language == .automatic,
+            detectLanguage: language == nil,
             skipSpecialTokens: true,
             withoutTimestamps: false,
-            wordTimestamps: true
+            wordTimestamps: true,
+            compressionRatioThreshold: 2.4,
+            logProbThreshold: -1.0,
+            firstTokenLogProbThreshold: -1.5,
+            noSpeechThreshold: Tuning.noSpeechThreshold
         )
     }
 
-    fileprivate static func isSpeech(_ text: String) -> Bool {
-        !text.isEmpty && !nonSpeechMarkers.contains(text.uppercased())
+    static func isSpeech(_ text: String) -> Bool {
+        guard !text.isEmpty, !nonSpeechMarkers.contains(text.uppercased()) else {
+            return false
+        }
+        let lowered = text.lowercased()
+        return !subtitleCredits.contains { lowered.hasPrefix($0) }
+    }
+
+    /// Credits Whisper learned from subtitled videos and writes over music or noise, never said by anyone here.
+    private static let subtitleCredits = [
+        "субтитры создавал", "субтитры сделал", "редактор субтитров", "корректор а.", "продолжение следует",
+        "subtitles by", "subtitles created by", "thanks for watching", "amara.org"
+    ]
+
+    /// Whisper's own rule for a segment it probably invented: likely silence, and decoded with little confidence.
+    /// Either alone is common in real speech; together they are how "Thanks for watching" appears over background
+    /// noise. WhisperKit applies the threshold per window, so a segment inside an accepted window still needs this.
+    static func isLikelyInvented(noSpeechProbability: Float, averageLogProbability: Float) -> Bool {
+        noSpeechProbability > Tuning.noSpeechThreshold && averageLogProbability < Tuning.logProbThreshold
+    }
+
+    private enum Tuning {
+        /// Stretches of speech whose language is averaged: about 90 seconds at most, held in memory until decided.
+        static let languageProbeChunks = 3
+        static let noSpeechThreshold: Float = 0.6
+        static let logProbThreshold: Float = -1.0
     }
 
     private static let logger = Logger(subsystem: "dev.local.Recorder", category: "Transcription")
@@ -204,6 +296,14 @@ private struct SpeechCollector {
             guard WhisperTranscriptionService.isSpeech(text) else {
                 continue
             }
+            guard
+                !WhisperTranscriptionService.isLikelyInvented(
+                    noSpeechProbability: segment.noSpeechProb,
+                    averageLogProbability: segment.avgLogprob
+                )
+            else {
+                continue
+            }
             speech.append(
                 RecognizedSpeech(
                     startTime: chunkStart + TimeInterval(segment.start),
@@ -214,6 +314,26 @@ private struct SpeechCollector {
             )
             secondsByLanguage[result.language, default: 0] += TimeInterval(segment.end - segment.start)
         }
+    }
+}
+
+/// What carries from one chunk of an input to the next.
+private struct InputSession {
+    let input: RecordingAudioInput
+    /// `nil` while automatic detection has not decided, or could not.
+    var language: String?
+    var isSettlingLanguage: Bool
+    /// Chunks held back until the language is settled.
+    var waiting: [SpeechChunk] = []
+
+    var waitingSpeechCount: Int {
+        waiting.count { !$0.isSilent }
+    }
+
+    init(input: RecordingAudioInput, requestedLanguage: String?) {
+        self.input = input
+        language = requestedLanguage
+        isSettlingLanguage = requestedLanguage == nil
     }
 }
 

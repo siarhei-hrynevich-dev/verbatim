@@ -6,10 +6,24 @@ struct SpeechChunk: Equatable, Sendable {
     let startSample: Int
     let samples: [Float]
 
-    /// Nothing but digital silence, as before a track that starts late. Nothing can be heard in it, and a model given
-    /// silence can imagine words, so it isn't worth running. Quiet rooms are not this quiet.
+    /// Nothing to hear: digital silence, as before a track that starts late, or nothing sustained above the level of
+    /// an idle microphone, whose clicks and hum reach about -50 dBFS (up to 9 windows of 50 ms in 30 seconds, where
+    /// speech is about -30 and fills hundreds). A model given that writes words such as "Thank you.", so it isn't worth
+    /// running. A chunk must have a few tenths of a second above the level, in total, rather than one loud instant.
     var isSilent: Bool {
-        samples.allSatisfy { abs($0) < Self.silenceAmplitude }
+        var loud = 0
+        var windows = 0
+        var start = 0
+        while start < samples.count {
+            let window = samples[start..<min(start + Self.levelWindowSamples, samples.count)]
+            let meanSquare = window.reduce(Float(0)) { $0 + $1 * $1 } / Float(window.count)
+            if meanSquare.squareRoot() >= Self.silenceLevel {
+                loud += 1
+            }
+            windows += 1
+            start += Self.levelWindowSamples
+        }
+        return loud < max(Self.minimumLoudWindows, min(Self.maximumLoudWindowsNeeded, windows / 4))
     }
 
     /// The same chunk from where its sound begins. Whisper tends to start its first segment at the start of what it is
@@ -20,6 +34,12 @@ struct SpeechChunk: Equatable, Sendable {
     }
 
     private static let silenceAmplitude: Float = 0.000_1
+    /// 50 ms.
+    private static let levelWindowSamples = 800
+    /// -50 dBFS RMS.
+    private static let silenceLevel: Float = 0.003_16
+    private static let minimumLoudWindows = 4
+    private static let maximumLoudWindowsNeeded = 16
 }
 
 /// Cuts audio into chunks no longer than a model's window, at silences where it can, using the same chunker and rules

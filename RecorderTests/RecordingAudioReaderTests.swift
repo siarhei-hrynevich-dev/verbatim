@@ -156,10 +156,11 @@ struct RecordingAudioReaderTests {
         return nil
     }
 
-    @Test func onlyDigitalSilenceCountsAsSilent() {
+    @Test func silenceAndInaudibleNoiseCountAsSilent() {
         let silence = [Float](repeating: 0, count: 16_000)
+        let word = [Float](repeating: 0.05, count: 8_000)
         #expect(SpeechChunk(startSample: 0, samples: silence).isSilent)
-        #expect(!SpeechChunk(startSample: 0, samples: silence + [0.01]).isSilent)
+        #expect(!SpeechChunk(startSample: 0, samples: silence + word).isSilent)
     }
 
     @Test func aChunkStartsWhereItsSoundDoes() {
