@@ -157,23 +157,44 @@ actor WhisperTranscriptionService: TranscriptionService {
         }
     }
 
-    /// The language with the most probability across the chunks' speech. `nil` when nothing could be detected, which
-    /// leaves each chunk to detect its own language as before.
+    /// The language the chunks' speech most likely is. `nil` when nothing could be detected, which leaves each chunk to
+    /// detect its own language as before.
     private func detectLanguage(in chunks: [SpeechChunk], with model: WhisperKit) async throws -> String? {
-        var totals: [String: Float] = [:]
+        var detections: [LanguageDetection] = []
         for chunk in chunks where !chunk.isSilent {
             try Task.checkCancellation()
+            let audio = chunk.droppingLeadingSilence()
             do {
-                let detected = try await model.detectLangauge(audioArray: chunk.droppingLeadingSilence().samples)
-                for (language, probability) in detected.langProbs {
-                    totals[language, default: 0] += probability
+                let detected = try await model.detectLangauge(audioArray: audio.samples)
+                let seconds = TimeInterval(audio.samples.count) / TimeInterval(AudioTimelineAssembler.sampleRate)
+                detections += detected.langProbs.map {
+                    LanguageDetection(language: $0.key, logProbability: $0.value, seconds: seconds)
                 }
             } catch {
                 Self.logger.error("Language detection failed: \(String(describing: error), privacy: .public)")
                 return nil
             }
         }
-        return totals.max { ($0.value, $1.key) < ($1.value, $0.key) }?.key
+        return Self.mostLikelyLanguage(of: detections)
+    }
+
+    /// What WhisperKit's detection reports for one chunk: only the language it picked, with that pick's
+    /// log-probability, not a distribution over languages.
+    struct LanguageDetection: Equatable {
+        let language: String
+        let logProbability: Float
+        let seconds: TimeInterval
+    }
+
+    /// Each chunk votes for its language with its probability, weighted by its length. Log-probabilities are never
+    /// added up: they are negative, so a language picked by fewer chunks would score higher. Weighting by length keeps
+    /// a short reply full of English terms in Russian speech from counting as much as a long stretch of speech.
+    static func mostLikelyLanguage(of detections: [LanguageDetection]) -> String? {
+        var votes: [String: Double] = [:]
+        for detection in detections {
+            votes[detection.language, default: 0] += exp(Double(detection.logProbability)) * max(detection.seconds, 0)
+        }
+        return votes.max { ($0.value, $1.key) < ($1.value, $0.key) }?.key
     }
 
     private func recognize(

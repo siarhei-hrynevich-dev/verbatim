@@ -26,6 +26,35 @@ struct WhisperSegmentFilterTests {
     }
 }
 
+struct LanguageVoteTests {
+    private typealias Detection = WhisperTranscriptionService.LanguageDetection
+
+    @Test
+    func theLanguageMostChunksPickWinsOverOneConfidentOutlier() {
+        let detections = [
+            Detection(language: "ru", logProbability: -0.3, seconds: 20),
+            Detection(language: "ru", logProbability: -0.4, seconds: 20),
+            Detection(language: "en", logProbability: -0.1, seconds: 20)
+        ]
+        #expect(WhisperTranscriptionService.mostLikelyLanguage(of: detections) == "ru")
+    }
+
+    @Test
+    func aShortChunkCountsLessThanALongOne() {
+        let detections = [
+            Detection(language: "en", logProbability: -0.05, seconds: 3),
+            Detection(language: "en", logProbability: -0.05, seconds: 4),
+            Detection(language: "ru", logProbability: -0.5, seconds: 25)
+        ]
+        #expect(WhisperTranscriptionService.mostLikelyLanguage(of: detections) == "ru")
+    }
+
+    @Test
+    func nothingDetectedDecidesNothing() {
+        #expect(WhisperTranscriptionService.mostLikelyLanguage(of: []) == nil)
+    }
+}
+
 struct SpeechChunkLevelTests {
     @Test
     func idleMicrophoneNoiseIsSilentButQuietSpeechIsNot() {
