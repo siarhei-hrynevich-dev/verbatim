@@ -35,6 +35,8 @@ struct LibraryIssue: Equatable, Sendable {
                 title: String(localized: "A recording needs a name"),
                 message: String(localized: "Enter a name with at least one visible character.")
             )
+        case .invalidTagName, .duplicateTagName, .tagNotFound:
+            self = Self.tag(error)
         case .corruptedMedia:
             self.init(
                 title: String(localized: "This file can’t be used"),
@@ -61,6 +63,26 @@ struct LibraryIssue: Equatable, Sendable {
                 message: String(
                     localized: "Check that its drive is connected, or choose another folder in the Recorder."
                 )
+            )
+        }
+    }
+
+    private static func tag(_ error: LibraryError) -> LibraryIssue {
+        switch error {
+        case .duplicateTagName:
+            LibraryIssue(
+                title: String(localized: "That tag already exists"),
+                message: String(localized: "Choose a name no other tag has.")
+            )
+        case .tagNotFound:
+            LibraryIssue(
+                title: String(localized: "Tag not found"),
+                message: String(localized: "It was already deleted.")
+            )
+        default:
+            LibraryIssue(
+                title: String(localized: "A tag needs a name"),
+                message: String(localized: "Enter a name of up to \(RecordingTag.nameLengthLimit) characters.")
             )
         }
     }

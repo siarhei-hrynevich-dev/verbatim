@@ -47,6 +47,23 @@ struct LibraryWindowView: View {
                 cancel: viewModel.cancelRename
             )
         }
+        .sheet(item: $viewModel.tagEditing) { editing in
+            TagEditorSheet(
+                editing: { if case .existing(let tag) = editing { tag } else { nil } }(),
+                save: viewModel.saveTag,
+                cancel: viewModel.cancelTagEditing
+            )
+        }
+        .confirmationDialog(
+            "Delete the tag “\(viewModel.pendingTagDeletion?.name ?? "")”?",
+            isPresented: tagDeletionBinding,
+            presenting: viewModel.pendingTagDeletion
+        ) { tag in
+            Button("Delete Tag", role: .destructive) { viewModel.deleteTag(tag.id) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Recordings keep everything but the tag.")
+        }
         .fileImporter(
             isPresented: locateBinding,
             allowedContentTypes: [.movie, .audio]
@@ -162,6 +179,8 @@ struct LibraryWindowView: View {
                     LibraryContextMenu(
                         item: item,
                         perform: { perform($0, on: item) },
+                        tags: viewModel.tags,
+                        toggleTag: { viewModel.toggleTag($0, on: item.id) },
                         dismiss: dismissContextMenuFromKeyboard
                     )
                     .onGeometryChange(for: CGFloat.self) {
@@ -267,6 +286,17 @@ extension LibraryWindowView {
             set: { item in
                 if item == nil {
                     viewModel.cancelRename()
+                }
+            }
+        )
+    }
+
+    fileprivate var tagDeletionBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.pendingTagDeletionID != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.cancelTagDeletion()
                 }
             }
         )

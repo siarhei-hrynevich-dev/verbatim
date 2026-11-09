@@ -66,6 +66,27 @@ enum LibrarySchema {
                     export_failure TEXT
                 );
                 """
+        ),
+        SQLiteMigration(
+            version: 3,
+            sql: """
+                CREATE TABLE tags (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    name TEXT NOT NULL,
+                    name_key TEXT NOT NULL UNIQUE,
+                    color TEXT NOT NULL,
+                    position INTEGER NOT NULL
+                );
+                CREATE TABLE recording_tags (
+                    recording_id TEXT NOT NULL REFERENCES recordings (id) ON DELETE CASCADE,
+                    tag_id TEXT NOT NULL REFERENCES tags (id) ON DELETE CASCADE,
+                    PRIMARY KEY (recording_id, tag_id)
+                );
+                CREATE INDEX recording_tags_tag_id ON recording_tags (tag_id);
+                INSERT INTO tags (id, name, name_key, color, position) VALUES
+                    ('6F1D2A40-0000-4000-8000-000000000001', 'work', 'work', 'blue', 0),
+                    ('6F1D2A40-0000-4000-8000-000000000002', 'personal', 'personal', 'green', 1);
+                """
         )
     ]
 

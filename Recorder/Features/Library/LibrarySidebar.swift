@@ -9,11 +9,34 @@ struct LibrarySidebar: View {
     var body: some View {
         List(selection: filterSelection) {
             Section("Library") {
-                ForEach([LibraryFilter.all, .recent, .processing], id: \.self, content: row)
+                ForEach([LibraryFilter.all, .recent, .processing], id: \.self) { row($0) }
             }
             Section("Type") {
-                ForEach([LibraryFilter.screen, .audio], id: \.self, content: row)
+                ForEach([LibraryFilter.screen, .audio], id: \.self) { row($0) }
             }
+            Section {
+                ForEach(viewModel.tags) { tag in
+                    row(.tagged(tag.id), color: tag.color)
+                        .contextMenu {
+                            Button("Edit Tag…") { viewModel.requestEditing(tag) }
+                            Button("Delete Tag…", role: .destructive) { viewModel.requestTagDeletion(tag) }
+                        }
+                }
+            } header: {
+                HStack {
+                    Text("Tags")
+                    Spacer()
+                    Button(action: viewModel.requestNewTag) {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 8)
+                    .help("New Tag")
+                    .accessibilityLabel("New Tag")
+                }
+            }
+            // The system's hover chevron for collapsing a section would push the button sideways.
+            .collapsible(false)
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
@@ -22,13 +45,17 @@ struct LibrarySidebar: View {
         .accessibilityLabel("Library sections")
     }
 
-    private func row(_ filter: LibraryFilter) -> some View {
+    private func row(_ filter: LibraryFilter, color: TagColor? = nil) -> some View {
         Label {
-            Text(filter.title)
+            Text(viewModel.title(for: filter))
                 .font(.system(size: 13))
         } icon: {
-            IconView(filter.icon, size: 15)
-                .foregroundStyle(VerbatimColor.accent)
+            if let color {
+                TagDot(color: color, size: 12)
+            } else {
+                IconView(filter.icon, size: 15)
+                    .foregroundStyle(VerbatimColor.accent)
+            }
         }
         .badge(viewModel.count(for: filter))
         .tag(filter)

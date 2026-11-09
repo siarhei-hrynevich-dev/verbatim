@@ -29,6 +29,16 @@ final class LibraryViewModel {
         var recording: LibraryRecording?
     }
 
+    /// The tag sheet being shown: a new tag, or an existing one to rename or recolor.
+    enum TagEditing: Identifiable, Equatable {
+        case new
+        case existing(RecordingTag)
+
+        var id: UUID? {
+            if case .existing(let tag) = self { tag.id } else { nil }
+        }
+    }
+
     /// Everything that requires asking the database again. The window reloads when this changes.
     struct ReloadKey: Equatable {
         let revision: Int
@@ -65,6 +75,10 @@ final class LibraryViewModel {
 
     var loadState = LoadState.loading
     var counts: [LibraryFilter: Int] = [:]
+    /// All tags, in sidebar order.
+    var tags: [RecordingTag] = []
+    var tagEditing: TagEditing?
+    var pendingTagDeletionID: RecordingTag.ID?
     var recordings: [UUID: LibraryRecording] = [:]
     var lastInspections: [UUID: RecordingFileInspection] = [:]
     var refreshCount = 0
@@ -111,6 +125,7 @@ final class LibraryViewModel {
         fixedNow = now
         self.calendar = calendar
         storage = previewData.storage
+        tags = RecordingTag.defaults
         isPreviewing = true
         apply(scenario)
     }
@@ -190,6 +205,18 @@ final class LibraryViewModel {
     /// The note about pausing the queue belongs to the design: real jobs are stopped one at a time.
     var showsProcessingNote: Bool {
         isPreviewing && filter == .processing && !isSearching
+    }
+
+    /// The name a section shows in the toolbar and sidebar.
+    func title(for filter: LibraryFilter) -> String {
+        if case .tagged(let id) = filter {
+            return tags.first { $0.id == id }?.name ?? filter.title
+        }
+        return filter.title
+    }
+
+    var pendingTagDeletion: RecordingTag? {
+        tags.first { $0.id == pendingTagDeletionID }
     }
 
     func count(for filter: LibraryFilter) -> Int {

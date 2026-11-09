@@ -120,6 +120,39 @@ final class LibraryService: FinishedRecordingRegistry {
         revision += 1
     }
 
+    /// Replaces the recording's tags. Setting what it already has changes nothing and leaves `revision` alone.
+    func setTags(_ tagIDs: Set<UUID>, for id: UUID) async throws {
+        let recording = try await existingRecording(id)
+        guard recording.tagIDs != tagIDs else {
+            return
+        }
+        try await repository.updateTags(id: id, tagIDs: tagIDs)
+        revision += 1
+    }
+
+    // MARK: - Tags
+
+    func tags() async throws -> [RecordingTag] {
+        try await repository.fetchTags()
+    }
+
+    func createTag(named name: String, color: TagColor) async throws {
+        let tag = RecordingTag(id: UUID(), name: try RecordingTag.validatedName(name), color: color)
+        try await repository.insertTag(tag)
+        revision += 1
+    }
+
+    func editTag(_ id: UUID, name: String, color: TagColor) async throws {
+        try await repository.updateTag(RecordingTag(id: id, name: try RecordingTag.validatedName(name), color: color))
+        revision += 1
+    }
+
+    /// The recordings keep everything but the tag.
+    func deleteTag(_ id: UUID) async throws {
+        try await repository.deleteTag(id: id)
+        revision += 1
+    }
+
     /// Repoints an existing entry at a file the user chose, after checking the file suits it. Never adds an entry.
     func relocate(_ id: UUID, to url: URL) async throws {
         var recording = try await existingRecording(id)

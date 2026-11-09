@@ -21,6 +21,8 @@ struct LibraryContextMenu: View {
 
     let item: LibraryItem
     let perform: (Command) -> Void
+    let tags: [RecordingTag]
+    let toggleTag: (RecordingTag) -> Void
     let dismiss: () -> Void
 
     @State private var highlightedCommand: Command?
@@ -30,10 +32,12 @@ struct LibraryContextMenu: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(sections.enumerated()), id: \.offset) { index, section in
                 if index > 0 {
-                    VerbatimColor.separator
-                        .frame(height: 0.5)
-                        .padding(.vertical, 5)
-                        .padding(.horizontal, 9)
+                    separator
+                }
+                // Tags sit before the section holding the removal commands, which stays last.
+                if index == sections.count - 1 {
+                    tagPicker
+                    separator
                 }
                 ForEach(section, id: \.self, content: menuItem)
             }
@@ -62,6 +66,57 @@ struct LibraryContextMenu: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Actions for \(item.title)")
         .accessibilityAddTraits(.isModal)
+    }
+
+    private var separator: some View {
+        VerbatimColor.separator
+            .frame(height: 0.5)
+            .padding(.vertical, 5)
+            .padding(.horizontal, 9)
+    }
+
+    /// Every tag with a checkmark for those the recording has. Each toggles independently, as in Finder.
+    private var tagPicker: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Tags")
+                .font(.system(size: 11))
+                .foregroundStyle(VerbatimColor.secondaryText)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 3)
+            if tags.isEmpty {
+                Text("No tags yet")
+                    .font(.system(size: 12))
+                    .foregroundStyle(VerbatimColor.tertiaryText)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3)
+            }
+            ForEach(tags) { tag in
+                let isOn = item.tags.contains(tag)
+                Button {
+                    toggleTag(tag)
+                } label: {
+                    HStack(spacing: 8) {
+                        TagDot(color: tag.color, size: 12)
+                        Text(tag.name)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if isOn {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                    }
+                    .font(.system(size: 13))
+                    .padding(.vertical, 3)
+                    .padding(.horizontal, 9)
+                    .frame(minHeight: 22)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .accessibilityLabel(tag.name)
+                .accessibilityAddTraits(isOn ? [.isSelected] : [])
+            }
+        }
     }
 
     private func menuItem(_ command: Command) -> some View {

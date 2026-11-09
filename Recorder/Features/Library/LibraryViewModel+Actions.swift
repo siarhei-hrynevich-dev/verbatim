@@ -14,6 +14,73 @@ extension LibraryViewModel {
         perform { try await $0.rename(id, to: title) }
     }
 
+    /// Adds the tag to the recording, or removes it when it already has it. Tags toggle independently.
+    func toggleTag(_ tag: RecordingTag, on id: LibraryItem.ID) {
+        guard let item = item(withID: id) else {
+            return
+        }
+        var chosen = tags.filter { candidate in item.tags.contains { $0.id == candidate.id } }
+        if let index = chosen.firstIndex(of: tag) {
+            chosen.remove(at: index)
+        } else {
+            chosen.append(tag)
+        }
+        guard !isPreviewing else {
+            if let index = items.firstIndex(where: { $0.id == id }) {
+                items[index].tags = tags.filter(chosen.contains)
+            }
+            return
+        }
+        let ids = Set(chosen.map(\.id))
+        perform { try await $0.setTags(ids, for: id) }
+    }
+
+    // MARK: - Managing tags
+
+    func requestNewTag() {
+        tagEditing = .new
+    }
+
+    func requestEditing(_ tag: RecordingTag) {
+        tagEditing = .existing(tag)
+    }
+
+    func cancelTagEditing() {
+        tagEditing = nil
+    }
+
+    /// Saves the open tag sheet and closes it. A failure, such as a name another tag has, is presented afterwards.
+    func saveTag(named name: String, color: TagColor) {
+        let editing = tagEditing
+        tagEditing = nil
+        switch editing {
+        case .new:
+            perform { try await $0.createTag(named: name, color: color) }
+        case .existing(let tag):
+            perform { try await $0.editTag(tag.id, name: name, color: color) }
+        case nil:
+            break
+        }
+    }
+
+    func requestTagDeletion(_ tag: RecordingTag) {
+        pendingTagDeletionID = tag.id
+    }
+
+    func cancelTagDeletion() {
+        pendingTagDeletionID = nil
+    }
+
+    func deleteTag(_ id: RecordingTag.ID) {
+        pendingTagDeletionID = nil
+        perform { [weak self] service in
+            try await service.deleteTag(id)
+            if self?.filter == .tagged(id) {
+                self?.filter = .all
+            }
+        }
+    }
+
     /// Removes the recording from the Library and offers Undo. Its files stay in Finder.
     func removeFromLibrary(_ id: LibraryItem.ID) {
         guard !isPreviewing else {

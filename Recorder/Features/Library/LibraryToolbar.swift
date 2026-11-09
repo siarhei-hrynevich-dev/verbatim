@@ -64,7 +64,7 @@ struct LibraryToolbar: ToolbarContent {
     }
 
     private var title: String {
-        viewModel.isSearching ? String(localized: "Search") : viewModel.filter.title
+        viewModel.isSearching ? String(localized: "Search") : viewModel.title(for: viewModel.filter)
     }
 
     private var subtitle: String {

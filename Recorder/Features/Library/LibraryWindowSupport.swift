@@ -45,6 +45,7 @@ extension LibraryFilter {
         case .processing: String(localized: "Processing")
         case .screen: String(localized: "Screen Recordings")
         case .audio: String(localized: "Audio Recordings")
+        case .tagged: String(localized: "Tag")
         }
     }
 
@@ -55,6 +56,33 @@ extension LibraryFilter {
         case .processing: .loader
         case .screen: .monitor
         case .audio: .audio
+        case .tagged: .list
+        }
+    }
+}
+
+extension TagColor {
+    var title: String {
+        switch self {
+        case .red: String(localized: "Red")
+        case .orange: String(localized: "Orange")
+        case .yellow: String(localized: "Yellow")
+        case .green: String(localized: "Green")
+        case .blue: String(localized: "Blue")
+        case .purple: String(localized: "Purple")
+        case .grey: String(localized: "Grey")
+        }
+    }
+
+    var swiftUI: Color {
+        switch self {
+        case .red: VerbatimColor.red
+        case .orange: VerbatimColor.orange
+        case .yellow: VerbatimColor.yellow
+        case .green: VerbatimColor.green
+        case .blue: Color(nsColor: .systemBlue)
+        case .purple: VerbatimColor.purple
+        case .grey: Color(nsColor: .systemGray)
         }
     }
 }

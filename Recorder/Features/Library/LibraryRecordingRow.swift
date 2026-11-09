@@ -62,6 +62,9 @@ struct LibraryRecordingRow: View {
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
+                if !item.tags.isEmpty {
+                    TagDots(tags: item.tags)
+                }
                 if item.hasTranscript {
                     IconView(.file, size: 12)
                         .foregroundStyle(VerbatimColor.tertiaryText)
@@ -110,6 +113,9 @@ struct LibraryRecordingRow: View {
         ]
         if item.hasTranscript {
             parts.append(String(localized: "Transcript available"))
+        }
+        if !item.tags.isEmpty {
+            parts.append(item.tags.map(\.name).joined(separator: ", "))
         }
         return parts.joined(separator: ", ")
     }

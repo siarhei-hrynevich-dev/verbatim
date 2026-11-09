@@ -42,6 +42,8 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
     var failureIssue: TranscriptionIssue?
     /// Whether the transcript can be made again. Sample recordings don't offer it.
     var offersRetranscription = false
+    /// In the order the sidebar lists tags.
+    var tags: [RecordingTag] = []
 
     /// A tracked recording's folder and files as last inspected.
     struct Location: Equatable, Sendable {
@@ -121,7 +123,8 @@ extension LibraryItem {
         inspection: RecordingFileInspection?,
         recordingsFolder: URL?,
         job: TranscriptionJob? = nil,
-        isProcessingAvailable: Bool = false
+        isProcessingAvailable: Bool = false,
+        tags: [RecordingTag] = []
     ) {
         let media = inspection?.media ?? recording.media
         let folder = media.url.deletingLastPathComponent()
@@ -146,7 +149,8 @@ extension LibraryItem {
             isProcessingAvailable: isProcessingAvailable,
             hasStoredTranscript: recording.hasTranscript,
             failureIssue: job?.failure.map(TranscriptionIssue.init),
-            offersRetranscription: isProcessingAvailable
+            offersRetranscription: isProcessingAvailable,
+            tags: tags
         )
     }
 }

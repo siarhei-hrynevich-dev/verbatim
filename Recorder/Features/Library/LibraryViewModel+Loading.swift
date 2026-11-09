@@ -10,8 +10,9 @@ extension LibraryViewModel {
         }
         do {
             let currentNow = now
+            let fetchedTags = try await service.tags()
             let fetched = try await service.recordings(matching: currentQuery(now: currentNow))
-            let newCounts = try await loadCounts(from: service, now: currentNow)
+            let newCounts = try await loadCounts(from: service, tags: fetchedTags, now: currentNow)
             let usedBytes = try await service.totalFileSize()
             let location = await service.recordingsFolder()
             guard !Task.isCancelled else {
@@ -22,7 +23,12 @@ extension LibraryViewModel {
                 usedBytes: usedBytes,
                 freeBytes: location.availableBytes
             )
+            tags = fetchedTags
             counts = newCounts
+            if case .tagged(let id) = filter, !fetchedTags.contains(where: { $0.id == id }) {
+                // The tag was deleted, possibly elsewhere, so there is nothing left to show.
+                filter = .all
+            }
             loadState = .loaded
             show(fetched, inspections: inspections(of: fetched), recordingsFolder: location.url)
 
@@ -69,9 +75,13 @@ extension LibraryViewModel {
         return query
     }
 
-    private func loadCounts(from service: LibraryService, now: Date) async throws -> [LibraryFilter: Int] {
+    private func loadCounts(
+        from service: LibraryService,
+        tags: [RecordingTag],
+        now: Date
+    ) async throws -> [LibraryFilter: Int] {
         var counts: [LibraryFilter: Int] = [:]
-        for filter in LibraryFilter.allCases {
+        for filter in LibraryFilter.fixedSections + tags.map({ .tagged($0.id) }) {
             counts[filter] = try await service.count(matching: filter.query(now: now, calendar: calendar))
         }
         return counts
@@ -93,13 +103,14 @@ extension LibraryViewModel {
     ) {
         lastInspections = inspections
         recordings = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
-        items = fetched.map {
+        items = fetched.map { recording in
             LibraryItem(
-                $0,
-                inspection: inspections[$0.id],
+                recording,
+                inspection: inspections[recording.id],
                 recordingsFolder: recordingsFolder,
-                job: processing?.job(for: $0.id),
-                isProcessingAvailable: processing != nil
+                job: processing?.job(for: recording.id),
+                isProcessingAvailable: processing != nil,
+                tags: tags.filter { recording.tagIDs.contains($0.id) }
             )
         }
         if let selectedItemID, recordings[selectedItemID] == nil {

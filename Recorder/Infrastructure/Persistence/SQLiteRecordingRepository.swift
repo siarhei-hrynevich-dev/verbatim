@@ -29,29 +29,36 @@ actor SQLiteRecordingRepository: RecordingRepository {
     // MARK: - RecordingRepository
 
     func insert(_ recording: LibraryRecording) throws {
-        _ = try perform { database in
-            try database.execute(
-                """
-                INSERT INTO recordings (
-                    id, title, title_key, created_at, duration, recording_type, media_path, media_bookmark, file_size,
-                    processing_status, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                bindings: [
-                    .text(Self.key(for: recording.id)),
-                    .text(recording.recording.title),
-                    .text(Self.searchKey(for: recording.recording.title)),
-                    .integer(Self.milliseconds(since: recording.recording.createdAt)),
-                    .real(recording.recording.duration),
-                    .text(recording.captureMode.rawValue),
-                    .text(recording.media.url.path(percentEncoded: false)),
-                    recording.media.bookmark.map(SQLiteDatabase.Value.blob) ?? .null,
-                    .integer(recording.fileSizeBytes),
-                    .text(recording.recording.processingStatus.rawValue),
-                    .integer(Self.milliseconds(since: now()))
-                ]
-            )
+        try perform { database in
+            try database.transaction {
+                try insertRow(of: recording, into: database)
+                try writeTags(recording.tagIDs, of: recording.id, in: database)
+            }
         }
+    }
+
+    private func insertRow(of recording: LibraryRecording, into database: SQLiteDatabase) throws {
+        _ = try database.execute(
+            """
+            INSERT INTO recordings (
+                id, title, title_key, created_at, duration, recording_type, media_path, media_bookmark, file_size,
+                processing_status, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            bindings: [
+                .text(Self.key(for: recording.id)),
+                .text(recording.recording.title),
+                .text(Self.searchKey(for: recording.recording.title)),
+                .integer(Self.milliseconds(since: recording.recording.createdAt)),
+                .real(recording.recording.duration),
+                .text(recording.captureMode.rawValue),
+                .text(recording.media.url.path(percentEncoded: false)),
+                recording.media.bookmark.map(SQLiteDatabase.Value.blob) ?? .null,
+                .integer(recording.fileSizeBytes),
+                .text(recording.recording.processingStatus.rawValue),
+                .integer(Self.milliseconds(since: now()))
+            ]
+        )
     }
 
     func fetch(id: UUID) throws -> LibraryRecording? {
@@ -99,6 +106,105 @@ actor SQLiteRecordingRepository: RecordingRepository {
                     .text(Self.key(for: id))
                 ]
             )
+        }
+    }
+
+    func updateTags(id: UUID, tagIDs: Set<UUID>) throws {
+        try perform { database in
+            try database.transaction {
+                let exists = try database.query(
+                    "SELECT 1 AS found FROM recordings WHERE id = ?",
+                    bindings: [.text(Self.key(for: id))]
+                )
+                guard !exists.isEmpty else {
+                    throw LibraryError.recordingNotFound
+                }
+                try writeTags(tagIDs, of: id, in: database)
+            }
+        }
+    }
+
+    /// Throws `tagNotFound` before changing anything when a tag does not exist.
+    private func writeTags(_ tagIDs: Set<UUID>, of id: UUID, in database: SQLiteDatabase) throws {
+        let keys = tagIDs.map(Self.key(for:)).sorted()
+        if !keys.isEmpty {
+            let known = try database.query(
+                "SELECT COUNT(*) AS total FROM tags WHERE id IN (\(Self.placeholders(keys.count)))",
+                bindings: keys.map { .text($0) }
+            )
+            guard Int(known.first?.integer("total") ?? 0) == keys.count else {
+                throw LibraryError.tagNotFound
+            }
+        }
+        try database.execute("DELETE FROM recording_tags WHERE recording_id = ?", bindings: [.text(Self.key(for: id))])
+        for key in keys {
+            try database.execute(
+                "INSERT INTO recording_tags (recording_id, tag_id) VALUES (?, ?)",
+                bindings: [.text(Self.key(for: id)), .text(key)]
+            )
+        }
+    }
+
+    func fetchTags() throws -> [RecordingTag] {
+        try perform { database in
+            try database.query("SELECT id, name, color FROM tags ORDER BY position, name_key").compactMap { row in
+                guard let id = row.text("id").flatMap(UUID.init(uuidString:)), let name = row.text("name"),
+                    let color = row.text("color").flatMap(TagColor.init(rawValue:))
+                else {
+                    Self.logger.error("Skipped an unreadable tag")
+                    return nil
+                }
+                return RecordingTag(id: id, name: name, color: color)
+            }
+        }
+    }
+
+    func insertTag(_ tag: RecordingTag) throws {
+        try performOnTag { database in
+            try database.execute(
+                """
+                INSERT INTO tags (id, name, name_key, color, position)
+                VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM tags))
+                """,
+                bindings: [
+                    .text(Self.key(for: tag.id)), .text(tag.name), .text(Self.searchKey(for: tag.name)),
+                    .text(tag.color.rawValue)
+                ]
+            )
+        }
+    }
+
+    func updateTag(_ tag: RecordingTag) throws {
+        let changed = try performOnTag { database in
+            try database.execute(
+                "UPDATE tags SET name = ?, name_key = ?, color = ? WHERE id = ?",
+                bindings: [
+                    .text(tag.name), .text(Self.searchKey(for: tag.name)), .text(tag.color.rawValue),
+                    .text(Self.key(for: tag.id))
+                ]
+            )
+        }
+        guard changed > 0 else {
+            throw LibraryError.tagNotFound
+        }
+    }
+
+    func deleteTag(id: UUID) throws {
+        let changed = try perform { database in
+            try database.execute("DELETE FROM tags WHERE id = ?", bindings: [.text(Self.key(for: id))])
+        }
+        guard changed > 0 else {
+            throw LibraryError.tagNotFound
+        }
+    }
+
+    /// A tag's name is unique, so a constraint violation here means the name is taken.
+    @discardableResult
+    private func performOnTag(_ body: (SQLiteDatabase) throws -> Int) throws -> Int {
+        do {
+            return try perform(body)
+        } catch LibraryError.alreadyInLibrary {
+            throw LibraryError.duplicateTagName
         }
     }
 
@@ -161,7 +267,11 @@ actor SQLiteRecordingRepository: RecordingRepository {
         return database
     }
 
-    // MARK: - Mapping
+}
+
+// MARK: - Mapping and queries
+
+extension SQLiteRecordingRepository {
 
     /// Rows come from a file on disk, so they are validated like any stored input. A row that cannot describe a
     /// recording is logged and skipped so that it does not take the whole library down.
@@ -189,7 +299,8 @@ actor SQLiteRecordingRepository: RecordingRepository {
                 captureMode: captureMode,
                 media: MediaReference(url: URL(fileURLWithPath: path), bookmark: row.blob("media_bookmark")),
                 fileSizeBytes: row.integer("file_size") ?? 0,
-                hasTranscript: row.integer("has_transcript") == 1
+                hasTranscript: row.integer("has_transcript") == 1,
+                tagIDs: Self.tagIDs(in: row)
             )
         } catch {
             logger.error("Skipped an invalid Library entry: \(String(describing: error))")
@@ -203,6 +314,10 @@ actor SQLiteRecordingRepository: RecordingRepository {
         row.text("processing_status").flatMap(Recording.ProcessingStatus.init(rawValue:)) ?? .recorded
     }
 
+    private static func tagIDs(in row: SQLiteDatabase.Row) -> Set<UUID> {
+        Set((row.text("tag_ids") ?? "").split(separator: ",").compactMap { UUID(uuidString: String($0)) })
+    }
+
     private static func condition(for query: RecordingQuery) -> (sql: String, bindings: [SQLiteDatabase.Value]) {
         var clauses: [String] = []
         var bindings: [SQLiteDatabase.Value] = []
@@ -213,6 +328,10 @@ actor SQLiteRecordingRepository: RecordingRepository {
         if !query.statuses.isEmpty {
             clauses.append("processing_status IN (\(placeholders(query.statuses.count)))")
             bindings += query.statuses.map { .text($0.rawValue) }
+        }
+        if let tagID = query.tagID {
+            clauses.append("EXISTS (SELECT 1 FROM recording_tags WHERE recording_id = recordings.id AND tag_id = ?)")
+            bindings.append(.text(key(for: tagID)))
         }
         if let createdSince = query.createdSince {
             clauses.append("created_at >= ?")
@@ -265,7 +384,8 @@ actor SQLiteRecordingRepository: RecordingRepository {
     }
 
     private static let selection = """
-        SELECT *, EXISTS (SELECT 1 FROM transcripts WHERE recording_id = recordings.id) AS has_transcript
+        SELECT *, EXISTS (SELECT 1 FROM transcripts WHERE recording_id = recordings.id) AS has_transcript,
+            (SELECT GROUP_CONCAT(tag_id) FROM recording_tags WHERE recording_id = recordings.id) AS tag_ids
         FROM recordings
         """
 

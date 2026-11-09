@@ -16,6 +16,7 @@ struct LibraryRecording: Identifiable, Equatable, Sendable {
     var fileSizeBytes: Int64
     /// Read from the transcript store. A failed or running re-transcription leaves an existing transcript in place.
     var hasTranscript = false
+    var tagIDs: Set<UUID> = []
 
     var id: UUID {
         recording.id
@@ -41,6 +42,8 @@ struct RecordingQuery: Equatable, Sendable {
 
     var captureModes: [CaptureMode] = []
     var statuses: [Recording.ProcessingStatus] = []
+    /// Only recordings carrying this tag.
+    var tagID: UUID?
     var createdSince: Date?
     var search: Search?
     var sortOrder = RecordingSortOrder.newestFirst
@@ -101,6 +104,9 @@ enum LibraryError: Error, Equatable, Sendable {
     case persistenceFailed(detail: String)
     case recordingNotFound
     case invalidTitle
+    case invalidTagName
+    case duplicateTagName
+    case tagNotFound
     case mediaUnavailable(MediaAvailability)
     case corruptedMedia
     /// The file chosen for a recording does not have that recording's kind of content.

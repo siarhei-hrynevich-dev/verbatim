@@ -195,6 +195,11 @@ struct WriteFailingRepository: RecordingRepository {
     func count(matching query: RecordingQuery) async throws -> Int { try await base.count(matching: query) }
     func totalFileSize() async throws -> Int64 { try await base.totalFileSize() }
     func updateTitle(id: UUID, title: String) async throws { throw failure }
+    func updateTags(id: UUID, tagIDs: Set<UUID>) async throws { throw failure }
+    func fetchTags() async throws -> [RecordingTag] { try await base.fetchTags() }
+    func insertTag(_ tag: RecordingTag) async throws { throw failure }
+    func updateTag(_ tag: RecordingTag) async throws { throw failure }
+    func deleteTag(id: UUID) async throws { throw failure }
     func update(_ recording: LibraryRecording) async throws { throw failure }
     func delete(id: UUID) async throws { throw failure }
 }

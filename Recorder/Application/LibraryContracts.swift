@@ -9,6 +9,15 @@ protocol RecordingRepository: Sendable {
     /// The total size of all tracked media, in bytes.
     func totalFileSize() async throws -> Int64
     func updateTitle(id: UUID, title: String) async throws
+    /// Replaces which tags a recording carries. Throws `tagNotFound` for a tag that does not exist.
+    func updateTags(id: UUID, tagIDs: Set<UUID>) async throws
+    /// All tags, in the order they are shown.
+    func fetchTags() async throws -> [RecordingTag]
+    /// Adds a tag after the others. Throws `duplicateTagName` when another tag has the name, ignoring case.
+    func insertTag(_ tag: RecordingTag) async throws
+    func updateTag(_ tag: RecordingTag) async throws
+    /// Removes the tag from every recording that carries it.
+    func deleteTag(id: UUID) async throws
     /// Replaces everything that can change about a recording after it is created.
     func update(_ recording: LibraryRecording) async throws
     func delete(id: UUID) async throws

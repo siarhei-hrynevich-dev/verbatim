@@ -1,12 +1,17 @@
 import Foundation
 
 /// A sidebar section of the Library, each showing a subset of recordings.
-enum LibraryFilter: CaseIterable, Hashable, Sendable {
+enum LibraryFilter: Hashable, Sendable {
     case all
     case recent
     case processing
     case screen
     case audio
+    /// Recordings carrying one tag, like a tag in Finder's sidebar.
+    case tagged(UUID)
+
+    /// The sections that do not depend on the user's tags.
+    static let fixedSections = [all, recent, processing, screen, audio]
 
     /// Recordings from today and the six days before it count as recent.
     static let recentDayCount = 7
@@ -31,6 +36,8 @@ enum LibraryFilter: CaseIterable, Hashable, Sendable {
             return item.kind != .audio
         case .audio:
             return item.kind == .audio
+        case .tagged(let tag):
+            return item.tags.contains { $0.id == tag }
         }
     }
 
@@ -52,6 +59,8 @@ enum LibraryFilter: CaseIterable, Hashable, Sendable {
             query.captureModes = [.screen, .window]
         case .audio:
             query.captureModes = [.audioOnly]
+        case .tagged(let tag):
+            query.tagID = tag
         }
         return query
     }
