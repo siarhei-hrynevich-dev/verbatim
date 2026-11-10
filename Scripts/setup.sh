@@ -24,3 +24,7 @@ if ! xcrun --find swift-format >/dev/null 2>&1 && ! command -v swift-format >/de
     install_tool swift-format
 fi
 swiftlint version
+# MLX compiles Metal shaders, and Xcode 26 ships the Metal toolchain as a separate component.
+if ! xcrun metal --version >/dev/null 2>&1; then
+    xcodebuild -downloadComponent MetalToolchain
+fi

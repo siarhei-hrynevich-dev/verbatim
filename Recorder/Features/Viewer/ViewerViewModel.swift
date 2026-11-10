@@ -74,10 +74,17 @@ final class ViewerViewModel {
     private(set) var activeLineIndex: Int?
     /// Indices of transcript lines containing the search text, ignoring case.
     private(set) var matchingLineIndices: [Int] = []
+    /// What the side panel shows: the transcript, or its summary.
+    var panelMode = ViewerPanelMode.transcript
+    /// The open recording's stored summary, once read.
+    var summary: TranscriptSummary?
 
     @ObservationIgnored let library: LibraryService?
     @ObservationIgnored let playback: (any PlaybackService)?
     @ObservationIgnored let processing: ProcessingCoordinator?
+    @ObservationIgnored let summaries: SummaryCoordinator?
+    /// The summaries revision whose result is showing, so a new summary is read when one is stored.
+    @ObservationIgnored var loadedSummaryRevision: Int?
     /// The stable identity of what is open; titles and file names can change.
     @ObservationIgnored var recordingID: UUID?
     @ObservationIgnored var openMedia: OpenMediaFile?
@@ -103,11 +110,13 @@ final class ViewerViewModel {
         library: LibraryService,
         playback: any PlaybackService,
         processing: ProcessingCoordinator? = nil,
+        summaries: SummaryCoordinator? = nil,
         previewScenario: ViewerPreviewScenario? = nil
     ) {
         self.library = library
         self.playback = playback
         self.processing = processing
+        self.summaries = summaries
         previewData = .sample()
         isPreviewing = false
         if let previewScenario {
@@ -120,6 +129,7 @@ final class ViewerViewModel {
         library = nil
         playback = nil
         processing = nil
+        summaries = nil
         self.previewData = previewData
         isPreviewing = true
         apply(scenario)
@@ -186,14 +196,6 @@ final class ViewerViewModel {
     }
 
     // MARK: - Transcript
-
-    /// Jumps to a transcript line, as clicking it does.
-    func seekToLine(at index: Int) {
-        guard lines.indices.contains(index) else {
-            return
-        }
-        seek(to: lines[index].start)
-    }
 
     func pauseFollowingPlayback() {
         isFollowingPlayback = false

@@ -5,7 +5,7 @@ import os
 extension ModelManager {
     /// Starts installing a model, or waits for the current recording to end. Ignored unless the model can accept a
     /// download, which is what prevents duplicates. Also serves as Retry.
-    func download(_ id: SpeechModel.ID) {
+    func download(_ id: Model.ID) {
         guard let model = model(withID: id) else {
             return
         }
@@ -26,7 +26,7 @@ extension ModelManager {
     }
 
     /// Stops an install and removes its partial files.
-    func cancelDownload(_ id: SpeechModel.ID) {
+    func cancelDownload(_ id: Model.ID) {
         guard let model = model(withID: id), state(of: id).isInstalling else {
             return
         }
@@ -41,7 +41,7 @@ extension ModelManager {
     }
 
     /// Tracked like an install, because a new download of the model has to wait until this is done.
-    private func discardFilesOfCancelledInstall(of model: SpeechModel) {
+    private func discardFilesOfCancelledInstall(of model: Model) {
         let token = UUID()
         let task = Task {
             await discardFiles(of: model)
@@ -69,14 +69,14 @@ extension ModelManager {
         }
     }
 
-    private func lastProgress(of id: SpeechModel.ID) -> ModelDownloadProgress? {
+    private func lastProgress(of id: Model.ID) -> ModelDownloadProgress? {
         if case .downloading(let progress) = state(of: id) {
             return progress
         }
         return nil
     }
 
-    private func startOrWait(_ model: SpeechModel, progress: ModelDownloadProgress?) {
+    private func startOrWait(_ model: Model, progress: ModelDownloadProgress?) {
         guard !isRecordingActive else {
             setState(.waitingForRecording(progress), for: model.id)
             return
@@ -92,7 +92,7 @@ extension ModelManager {
         installs[model.id] = ActiveInstall(token: token, task: task)
     }
 
-    private func runInstall(of model: SpeechModel, token: UUID) async {
+    private func runInstall(of model: Model, token: UUID) async {
         do {
             let files = try await installFiles(of: model, token: token)
             // Nothing suspends from here to the state change, so a cancel cannot slip in between.
@@ -113,8 +113,8 @@ extension ModelManager {
 
     /// Runs the work off the main actor while its events come back in order. All of them are applied before this
     /// returns, so the outcome can never overtake the last phase.
-    private func installFiles(of model: SpeechModel, token: UUID) async throws -> ModelFileWorkflow.InstalledFiles {
-        let (events, continuation) = AsyncStream.makeStream(of: ModelFileWorkflow.InstallEvent.self)
+    private func installFiles(of model: Model, token: UUID) async throws -> ModelFileWorkflow<Model>.InstalledFiles {
+        let (events, continuation) = AsyncStream.makeStream(of: ModelFileWorkflow<Model>.InstallEvent.self)
         let observer = Task {
             for await event in events where installs[model.id]?.token == token {
                 apply(event, to: model.id)
@@ -137,7 +137,7 @@ extension ModelManager {
 
     /// The first model is selected, so there is something to use without another step. An unavailable selection stays,
     /// and so does having none among other installed models: those are the user's to change.
-    private func selectIfFirstInstalled(_ id: SpeechModel.ID) {
+    private func selectIfFirstInstalled(_ id: Model.ID) {
         let hasOtherInstalledModel = catalog.contains { $0.id != id && state(of: $0.id).isInstalled }
         if selectedModelID == nil, !hasOtherInstalledModel {
             setSelection(id)
@@ -145,7 +145,7 @@ extension ModelManager {
     }
 
     /// Only a download in progress moves on: an event can arrive after the install was paused or has ended.
-    private func apply(_ event: ModelFileWorkflow.InstallEvent, to id: SpeechModel.ID) {
+    private func apply(_ event: ModelFileWorkflow<Model>.InstallEvent, to id: Model.ID) {
         guard case .downloading = state(of: id) else {
             return
         }
@@ -157,7 +157,7 @@ extension ModelManager {
 
     /// Whoever cancelled or paused has already set the state, and a newer request may be underway; only a genuine
     /// failure changes it here.
-    private func handleInstallEnd(of model: SpeechModel, token: UUID, error: any Error) async {
+    private func handleInstallEnd(of model: Model, token: UUID, error: any Error) async {
         switch stopReasons.removeValue(forKey: token) {
         case .cancelled:
             await discardFiles(of: model)
@@ -184,19 +184,21 @@ extension ModelManager {
         return .downloadFailed(detail: error.localizedDescription)
     }
 
-    private func discardFiles(of model: SpeechModel) async {
+    private func discardFiles(of model: Model) async {
         do {
-            try await workflow.provider.removeFiles(of: model, includingTokenizer: !isTokenizerShared(by: model))
+            try await workflow.provider.removeFiles(of: model, includingSharedFiles: !areSharedFilesInUse(by: model))
         } catch {
             Self.logger.error("Could not discard files of \(model.id, privacy: .public): \(String(describing: error))")
         }
     }
 
-    /// Conservative: any other model that is not plainly absent may be relying on the tokenizer.
-    func isTokenizerShared(by model: SpeechModel) -> Bool {
-        catalog.contains {
-            $0.id != model.id && $0.tokenizerRepository == model.tokenizerRepository
-                && state(of: $0.id) != .notInstalled
+    /// Conservative: any other model that is not plainly absent may rely on the shared files, such as a tokenizer.
+    func areSharedFilesInUse(by model: Model) -> Bool {
+        guard let key = model.sharedFilesKey else {
+            return false
+        }
+        return catalog.contains {
+            $0.id != model.id && $0.sharedFilesKey == key && state(of: $0.id) != .notInstalled
         }
     }
 }

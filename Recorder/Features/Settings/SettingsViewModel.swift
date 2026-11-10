@@ -12,7 +12,9 @@ final class SettingsViewModel {
         let loginItem: any LoginItemControlling
         let recordingsStorage: any RecordingsStorageProviding
         let systemActions: any SystemActions
-        let modelManager: ModelManager
+        let modelManager: SpeechModelManager
+        let languageModelManager: LanguageModelManager
+        let summaryPreferences: SummaryPreferences
         let metadata: AppMetadata
         /// Goes through the Recorder, which owns the recordings folder and shows it in its footer.
         let chooseRecordingsFolder: @MainActor (URL) async -> Void
@@ -23,7 +25,8 @@ final class SettingsViewModel {
     /// A failed General or Storage action.
     var issue: String?
 
-    private(set) var models: ModelSettingsViewModel
+    private(set) var models: ModelSettingsViewModel<SpeechModel>
+    private(set) var summaries: SummarySettingsViewModel
     private(set) var loginItemStatus = LoginItemStatus.disabled
     /// `nil` until first read, or when it could not be read.
     private(set) var recordingsStorage: RecordingsStorage?
@@ -35,6 +38,7 @@ final class SettingsViewModel {
         self.dependencies = dependencies
         liveDependencies = dependencies
         models = ModelSettingsViewModel(manager: dependencies.modelManager, systemActions: dependencies.systemActions)
+        summaries = Self.makeSummaries(dependencies)
         if let previewScenario {
             apply(previewScenario)
         }
@@ -125,7 +129,7 @@ final class SettingsViewModel {
     // MARK: - Storage
 
     var modelsBytes: Int64 {
-        models.storageUsageBytes
+        models.storageUsageBytes + summaries.models.storageUsageBytes
     }
 
     var totalBytes: Int64 {
@@ -142,6 +146,7 @@ final class SettingsViewModel {
             )
         }
         await models.refresh()
+        await summaries.models.refresh()
     }
 
     func chooseRecordingsFolder(_ url: URL) {
@@ -211,8 +216,19 @@ final class SettingsViewModel {
     private func use(_ next: Dependencies) {
         dependencies = next
         models = ModelSettingsViewModel(manager: next.modelManager, systemActions: next.systemActions)
+        summaries = Self.makeSummaries(next)
         recordingsStorage = nil
         refreshLoginItemStatus()
+    }
+
+    private static func makeSummaries(_ dependencies: Dependencies) -> SummarySettingsViewModel {
+        SummarySettingsViewModel(
+            models: ModelSettingsViewModel(
+                manager: dependencies.languageModelManager,
+                systemActions: dependencies.systemActions
+            ),
+            preferences: dependencies.summaryPreferences
+        )
     }
 
     private static let logger = Logger(subsystem: "dev.local.Recorder", category: "Settings")

@@ -1,51 +1,51 @@
 import Foundation
 import Observation
 
-/// What the AI Models tab shows, and the user's actions on it. Downloads and files belong to `ModelManager`, which
-/// outlives this object and the window.
+/// What the AI Models tab shows of one kind of model, and the user's actions on it. Downloads and files belong to
+/// `ModelManager`, which outlives this object and the window.
 @MainActor
 @Observable
-final class ModelSettingsViewModel {
+final class ModelSettingsViewModel<Model: InstallableModel> {
     /// One model as the catalog shows it.
     struct Row: Identifiable, Equatable {
-        let model: SpeechModel
+        let model: Model
         let state: ModelInstallState
         /// `nil` until a size is known.
         let sizeBytes: Int64?
         let isSelected: Bool
         let isSupported: Bool
 
-        var id: SpeechModel.ID {
+        var id: Model.ID {
             model.id
         }
     }
 
     /// A removal waiting to be confirmed.
     struct RemovalRequest: Identifiable, Equatable {
-        let model: SpeechModel
+        let model: Model
         let reclaimedBytes: Int64?
         let isSelected: Bool
 
-        var id: SpeechModel.ID {
+        var id: Model.ID {
             model.id
         }
     }
 
     /// What needs attention above the catalog. Selecting or downloading is left to the user.
     enum Notice: Equatable {
-        case noModelInstalled(recommended: SpeechModel?)
+        case noModelInstalled(recommended: Model?)
         case noModelSelected
-        case selectedModelUnavailable(SpeechModel)
+        case selectedModelUnavailable(Model)
     }
 
     var removalRequest: RemovalRequest?
     /// A failed action that has no place in a row.
     var actionIssue: ModelIssue?
 
-    private let manager: ModelManager
+    let manager: ModelManager<Model>
     private let systemActions: any SystemActions
 
-    init(manager: ModelManager, systemActions: any SystemActions) {
+    init(manager: ModelManager<Model>, systemActions: any SystemActions) {
         self.manager = manager
         self.systemActions = systemActions
     }
@@ -110,15 +110,15 @@ final class ModelSettingsViewModel {
         await manager.refreshCatalog()
     }
 
-    func download(_ id: SpeechModel.ID) {
+    func download(_ id: Model.ID) {
         manager.download(id)
     }
 
-    func cancelDownload(_ id: SpeechModel.ID) {
+    func cancelDownload(_ id: Model.ID) {
         manager.cancelDownload(id)
     }
 
-    func select(_ id: SpeechModel.ID) {
+    func select(_ id: Model.ID) {
         do {
             try manager.select(id)
         } catch {
@@ -127,7 +127,7 @@ final class ModelSettingsViewModel {
     }
 
     /// Asks before removing. Failed downloads hold nothing worth a question, so they go straight away.
-    func requestRemoval(of id: SpeechModel.ID) {
+    func requestRemoval(of id: Model.ID) {
         guard let row = rows.first(where: { $0.id == id }), row.state.acceptsRemoval else {
             return
         }
@@ -150,7 +150,7 @@ final class ModelSettingsViewModel {
         removalRequest = nil
     }
 
-    private func remove(_ id: SpeechModel.ID) {
+    private func remove(_ id: Model.ID) {
         Task {
             do {
                 try await manager.remove(id)

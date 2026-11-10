@@ -88,8 +88,8 @@ struct WhisperModelProvider: SpeechModelProviding {
         files.inspect(model)
     }
 
-    func removeFiles(of model: SpeechModel, includingTokenizer: Bool) async throws {
-        try files.removeFiles(of: model, includingTokenizer: includingTokenizer)
+    func removeFiles(of model: SpeechModel, includingSharedFiles: Bool) async throws {
+        try files.removeFiles(of: model, includingTokenizer: includingSharedFiles)
     }
 
     func resolve(_ model: SpeechModel) -> ResolvedSpeechModel {

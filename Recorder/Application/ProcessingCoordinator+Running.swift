@@ -136,7 +136,7 @@ extension ProcessingCoordinator {
     }
 }
 
-extension ModelManager: TranscriptionModelSource {
+extension ModelManager: TranscriptionModelSource where Model == SpeechModel {
     func prepareForUse() async {
         await reconcile()
     }

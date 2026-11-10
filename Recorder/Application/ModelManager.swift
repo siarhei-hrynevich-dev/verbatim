@@ -2,20 +2,21 @@ import Foundation
 import Observation
 import os
 
-/// The single owner of speech model state: what is available and installed, which model is selected, and every
-/// installation in progress. It outlives the Settings window, so a download continues with the window closed.
+/// The single owner of one kind of model's state: what is available and installed, which model is selected, and every
+/// installation in progress. There is one for speech models and one for language models; each outlives the Settings
+/// window, so a download continues with the window closed.
 ///
 /// State changes happen synchronously on the main actor before any suspension, so a duplicate request is rejected by
 /// the state check. The work itself runs off the main actor in the provider, and no model is ever loaded here.
 @MainActor
 @Observable
-final class ModelManager {
+final class ModelManager<Model: InstallableModel> {
     /// The selected model as far as it can be used right now.
     enum SelectionStatus: Equatable, Sendable {
         case none
-        case ready(SpeechModel)
+        case ready(Model)
         /// Selected, but its files are gone or damaged. Nothing is switched or downloaded without being asked.
-        case unavailable(SpeechModel)
+        case unavailable(Model)
     }
 
     /// Why an install stopped, when that was intended rather than a failure.
@@ -29,11 +30,11 @@ final class ModelManager {
         let task: Task<Void, Never>
     }
 
-    let catalog: [SpeechModel]
+    let catalog: [Model]
 
-    private(set) var states: [SpeechModel.ID: ModelInstallState] = [:]
-    private(set) var selectedModelID: SpeechModel.ID?
-    private(set) var supportedModelIDs: Set<SpeechModel.ID>
+    private(set) var states: [Model.ID: ModelInstallState] = [:]
+    private(set) var selectedModelID: Model.ID?
+    private(set) var supportedModelIDs: Set<Model.ID>
     private(set) var storageUsageBytes: Int64 = 0
     /// The last refresh could not reach the repository, so sizes are the ones saved earlier.
     private(set) var isCatalogOutdated = false
@@ -43,37 +44,37 @@ final class ModelManager {
     private(set) var isRecordingActive = false
     var registry = ModelRegistry()
 
-    @ObservationIgnored private let provider: any SpeechModelProviding
-    @ObservationIgnored let workflow: ModelFileWorkflow
+    @ObservationIgnored private let provider: any ModelFileProviding<Model>
+    @ObservationIgnored let workflow: ModelFileWorkflow<Model>
     @ObservationIgnored private let registryStore: any ModelRegistryStore
-    @ObservationIgnored private let settings: any SettingsRepository
+    @ObservationIgnored private let selection: any ModelSelectionStore
     @ObservationIgnored let now: @Sendable () -> Date
-    @ObservationIgnored var installs: [SpeechModel.ID: ActiveInstall] = [:]
+    @ObservationIgnored var installs: [Model.ID: ActiveInstall] = [:]
     @ObservationIgnored var stopReasons: [UUID: StopReason] = [:]
-    @ObservationIgnored var filesToDiscardFirst: Set<SpeechModel.ID> = []
-    @ObservationIgnored private var leases: [UUID: SpeechModel.ID] = [:]
+    @ObservationIgnored var filesToDiscardFirst: Set<Model.ID> = []
+    @ObservationIgnored private var leases: [UUID: Model.ID] = [:]
     /// Advances with each state change, so a slow disk check cannot overwrite what happened during it.
-    @ObservationIgnored private var generations: [SpeechModel.ID: Int] = [:]
+    @ObservationIgnored private var generations: [Model.ID: Int] = [:]
     @ObservationIgnored private var reconcileTask: Task<Void, Never>?
     @ObservationIgnored private var catalogRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var hasLoadedRegistry = false
     @ObservationIgnored private var hasRefreshedCatalog = false
 
     init(
-        catalog: [SpeechModel] = SpeechModelCatalog.curated,
-        provider: any SpeechModelProviding,
+        catalog: [Model],
+        provider: any ModelFileProviding<Model>,
         registryStore: any ModelRegistryStore,
-        settings: any SettingsRepository,
+        selection: any ModelSelectionStore,
         now: @escaping @Sendable () -> Date = { .now }
     ) {
         self.catalog = catalog
         self.provider = provider
         workflow = ModelFileWorkflow(provider: provider)
         self.registryStore = registryStore
-        self.settings = settings
+        self.selection = selection
         self.now = now
         supportedModelIDs = provider.supportedModelIDs()
-        selectedModelID = settings.loadSelectedModelID()
+        selectedModelID = selection.loadSelectedModelID()
     }
 
     // MARK: - Reading state
@@ -82,8 +83,8 @@ final class ModelManager {
         provider.storageLocation
     }
 
-    var recommendedModel: SpeechModel? {
-        SpeechModelCatalog.recommended(from: catalog, supportedIDs: supportedModelIDs)
+    var recommendedModel: Model? {
+        Model.recommended(from: catalog, supportedIDs: supportedModelIDs)
     }
 
     var selectionStatus: SelectionStatus {
@@ -93,27 +94,27 @@ final class ModelManager {
         return state(of: selectedModelID).isInstalled ? .ready(model) : .unavailable(model)
     }
 
-    func state(of id: SpeechModel.ID) -> ModelInstallState {
+    func state(of id: Model.ID) -> ModelInstallState {
         states[id] ?? .notInstalled
     }
 
-    func model(withID id: SpeechModel.ID) -> SpeechModel? {
+    func model(withID id: Model.ID) -> Model? {
         catalog.first { $0.id == id }
     }
 
     /// The space an installed model takes, or otherwise the last known download size. `nil` until one is known.
-    func sizeBytes(of id: SpeechModel.ID) -> Int64? {
+    func sizeBytes(of id: Model.ID) -> Int64? {
         if case .installed(let sizeBytes) = state(of: id) {
             return sizeBytes
         }
         return registry.artifactSizes[id]
     }
 
-    // MARK: - Transcription contract
+    // MARK: - Contract for the engines
 
     /// The selected model's identifier and location, without loading it. Throws `noModelSelected` or
     /// `selectedModelUnavailable`; the caller reports that rather than choosing another model.
-    func resolveSelectedModel() throws(ModelManagementError) -> ResolvedSpeechModel {
+    func resolveSelectedModel() throws(ModelManagementError) -> Model.Resolved {
         guard let selectedModelID, let model = model(withID: selectedModelID) else {
             throw .noModelSelected
         }
@@ -124,30 +125,32 @@ final class ModelManager {
     }
 
     /// Resolves the selected model and protects it from removal until `release(_:)`.
-    func acquireSelectedModel() throws(ModelManagementError) -> ModelLease {
-        let model = try resolveSelectedModel()
-        let lease = ModelLease(id: UUID(), model: model)
-        leases[lease.id] = model.id
+    func acquireSelectedModel() throws(ModelManagementError) -> ModelLease<Model> {
+        guard let selectedModelID else {
+            throw .noModelSelected
+        }
+        let lease = ModelLease<Model>(id: UUID(), model: try resolveSelectedModel())
+        leases[lease.id] = selectedModelID
         return lease
     }
 
-    func release(_ lease: ModelLease) {
+    func release(_ lease: ModelLease<Model>) {
         leases[lease.id] = nil
     }
 
     // MARK: - Selecting
 
     /// Only an installed, validated model can be selected. Selecting loads nothing.
-    func select(_ id: SpeechModel.ID) throws(ModelManagementError) {
+    func select(_ id: Model.ID) throws(ModelManagementError) {
         guard state(of: id).isInstalled else {
             throw .modelNotInstalled
         }
         setSelection(id)
     }
 
-    func setSelection(_ id: SpeechModel.ID?) {
+    func setSelection(_ id: Model.ID?) {
         selectedModelID = id
-        settings.saveSelectedModelID(id)
+        selection.saveSelectedModelID(id)
     }
 
     /// Recording takes priority: running installs stop, keeping their partial files, and continue when it ends.
@@ -167,7 +170,7 @@ final class ModelManager {
 
     /// Removes an installed model, or what is left of a failed one, leaving recordings and transcripts alone. If it
     /// was selected, none remains selected: another installed model is never chosen on the user's behalf.
-    func remove(_ id: SpeechModel.ID) async throws(ModelManagementError) {
+    func remove(_ id: Model.ID) async throws(ModelManagementError) {
         guard let model = model(withID: id), state(of: id).acceptsRemoval else {
             throw .modelNotInstalled
         }
@@ -177,7 +180,7 @@ final class ModelManager {
         let previous = state(of: id)
         setState(.removing, for: id)
         do {
-            try await provider.removeFiles(of: model, includingTokenizer: !isTokenizerShared(by: model))
+            try await provider.removeFiles(of: model, includingSharedFiles: !areSharedFilesInUse(by: model))
         } catch {
             setState(previous, for: id)
             await reconcileFiles(of: model)
@@ -229,7 +232,7 @@ final class ModelManager {
         }
     }
 
-    private func reconcileFiles(of model: SpeechModel) async {
+    private func reconcileFiles(of model: Model) async {
         let id = model.id
         guard !state(of: id).isInstalling, state(of: id) != .removing else {
             return
@@ -292,7 +295,7 @@ final class ModelManager {
         }
     }
 
-    func setState(_ next: ModelInstallState, for id: SpeechModel.ID) {
+    func setState(_ next: ModelInstallState, for id: Model.ID) {
         let current = state(of: id)
         guard current.allowsTransition(to: next) else {
             assertionFailure("Invalid model transition from \(current) to \(next)")
@@ -303,5 +306,23 @@ final class ModelManager {
         generations[id, default: 0] += 1
     }
 
-    static let logger = Logger(subsystem: "dev.local.Recorder", category: "Models")
+    /// Generic types cannot hold static stored properties.
+    static var logger: Logger {
+        Logger(subsystem: "dev.local.Recorder", category: "Models")
+    }
+}
+
+typealias SpeechModelManager = ModelManager<SpeechModel>
+typealias LanguageModelManager = ModelManager<LanguageModel>
+
+extension ModelManager where Model == SpeechModel {
+    convenience init(
+        catalog: [SpeechModel] = SpeechModelCatalog.curated,
+        provider: any ModelFileProviding<SpeechModel>,
+        registryStore: any ModelRegistryStore,
+        settings: any SettingsRepository,
+        now: @escaping @Sendable () -> Date = { .now }
+    ) {
+        self.init(catalog: catalog, provider: provider, registryStore: registryStore, selection: settings, now: now)
+    }
 }

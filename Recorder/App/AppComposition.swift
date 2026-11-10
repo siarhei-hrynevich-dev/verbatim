@@ -10,12 +10,23 @@ enum AppComposition {
         let viewer: ViewerViewModel
         let settings: SettingsViewModel
         let preferences: AppPreferences
-        let modelManager: ModelManager
+        let modelManager: SpeechModelManager
+        let languageModelManager: LanguageModelManager
         let processing: ProcessingCoordinator
+        let summaries: SummaryCoordinator
         /// Holds model and transcription work back while recording.
         let recordingPriority: RecordingPriorityPolicy
         /// Renders the Viewer's video. Created here because it is the one view tied to the concrete player.
         let viewerVideoSurface: AnyView
+    }
+
+    /// The models and the work done with them after a recording, created together because each depends on the last.
+    struct PostProcessing {
+        let speechModels: SpeechModelManager
+        let processing: ProcessingCoordinator
+        let languageModels: LanguageModelManager
+        let summaryPreferences: SummaryPreferences
+        let summaries: SummaryCoordinator
     }
 
     /// With a scenario, a window starts on that design state; capture and the library stay untouched unless the user
@@ -31,13 +42,8 @@ enum AppComposition {
         let databaseURL = SQLiteRecordingRepository.defaultDatabaseURL()
         let library = makeLibrary(databaseURL: databaseURL, store: store, systemActions: systemActions)
         let preferences = AppPreferences(repository: UserDefaultsSettingsRepository(defaults: .standard))
-        let modelManager = makeModelManager()
-        let processing = makeProcessing(
-            databaseURL: databaseURL,
-            library: library,
-            modelManager: modelManager,
-            preferences: preferences
-        )
+        let post = makePostProcessing(databaseURL: databaseURL, library: library, preferences: preferences)
+        let processing = post.processing
         let (coordinator, recorder) = makeRecording(
             library: library,
             processing: processing,
@@ -51,7 +57,7 @@ enum AppComposition {
             recorder: recorder,
             systemActions: systemActions,
             preferences: preferences,
-            modelManager: modelManager
+            models: post
         )
         if let settingsScenario {
             settings.apply(settingsScenario)
@@ -63,16 +69,21 @@ enum AppComposition {
                 library: library,
                 playback: playback,
                 processing: processing,
+                summaries: post.summaries,
                 previewScenario: viewerScenario
             ),
             settings: settings,
             preferences: preferences,
-            modelManager: modelManager,
+            modelManager: post.speechModels,
+            languageModelManager: post.languageModels,
             processing: processing,
+            summaries: post.summaries,
             recordingPriority: RecordingPriorityPolicy(
                 coordinator: coordinator,
-                models: modelManager,
-                processing: processing
+                speechModels: post.speechModels,
+                languageModels: post.languageModels,
+                processing: processing,
+                summaries: post.summaries
             ),
             viewerVideoSurface: AnyView(AVPlayerSurface(service: playback))
         )
@@ -81,7 +92,7 @@ enum AppComposition {
     private static func makeProcessing(
         databaseURL: URL,
         library: LibraryService,
-        modelManager: ModelManager,
+        modelManager: SpeechModelManager,
         preferences: AppPreferences
     ) -> ProcessingCoordinator {
         let store = SQLiteTranscriptRepository(databaseURL: databaseURL)
@@ -96,7 +107,7 @@ enum AppComposition {
                 language: { preferences.settings.transcriptionLanguage }
             )
         )
-        library.removalObserver = processing
+        library.addRemovalObserver(processing)
         return processing
     }
 
@@ -152,7 +163,7 @@ enum AppComposition {
         recorder: RecorderViewModel,
         systemActions: any SystemActions,
         preferences: AppPreferences,
-        modelManager: ModelManager
+        models: PostProcessing
     ) -> SettingsViewModel {
         SettingsViewModel(
             dependencies: SettingsViewModel.Dependencies(
@@ -160,19 +171,69 @@ enum AppComposition {
                 loginItem: SMAppServiceLoginItem(),
                 recordingsStorage: library,
                 systemActions: systemActions,
-                modelManager: modelManager,
+                modelManager: models.speechModels,
+                languageModelManager: models.languageModels,
+                summaryPreferences: models.summaryPreferences,
                 metadata: AppMetadata(infoDictionary: Bundle.main.infoDictionary ?? [:]),
                 chooseRecordingsFolder: { await recorder.useChosenFolder($0) }
             )
         )
     }
 
-    private static func makeModelManager() -> ModelManager {
+    private static func makeModelManager() -> SpeechModelManager {
         let storage = WhisperModelProvider.defaultStorageLocation()
-        return ModelManager(
+        return SpeechModelManager(
             provider: WhisperModelProvider(storageLocation: storage),
             registryStore: JSONModelRegistryStore(fileURL: JSONModelRegistryStore.defaultFileURL(in: storage)),
             settings: UserDefaultsSettingsRepository(defaults: .standard)
+        )
+    }
+
+    private static func makeLanguageModelManager(selection: any ModelSelectionStore) -> LanguageModelManager {
+        let storage = HubLanguageModelProvider.defaultStorageLocation()
+        return LanguageModelManager(
+            catalog: LanguageModelCatalog.curated,
+            provider: HubLanguageModelProvider(storageLocation: storage),
+            registryStore: JSONModelRegistryStore(fileURL: JSONModelRegistryStore.defaultFileURL(in: storage)),
+            selection: selection
+        )
+    }
+
+    private static func makePostProcessing(
+        databaseURL: URL,
+        library: LibraryService,
+        preferences: AppPreferences
+    ) -> PostProcessing {
+        let speechModels = makeModelManager()
+        let processing = makeProcessing(
+            databaseURL: databaseURL,
+            library: library,
+            modelManager: speechModels,
+            preferences: preferences
+        )
+        let settings = UserDefaultsSummarySettingsRepository(defaults: .standard)
+        let summaryPreferences = SummaryPreferences(repository: settings)
+        let languageModels = makeLanguageModelManager(selection: settings)
+        let summaries = SummaryCoordinator(
+            dependencies: SummaryCoordinator.Dependencies(
+                transcripts: SQLiteTranscriptRepository(databaseURL: databaseURL),
+                summaries: SQLiteSummaryRepository(databaseURL: databaseURL),
+                generation: LocalTextGenerationProvider(
+                    models: languageModels,
+                    runtime: MLXTextGenerationRuntime(),
+                    preferences: summaryPreferences
+                ),
+                isTranscriptionBusy: { processing.hasActiveJobs },
+                language: { summaryPreferences.language }
+            )
+        )
+        library.addRemovalObserver(summaries)
+        return PostProcessing(
+            speechModels: speechModels,
+            processing: processing,
+            languageModels: languageModels,
+            summaryPreferences: summaryPreferences,
+            summaries: summaries
         )
     }
 }

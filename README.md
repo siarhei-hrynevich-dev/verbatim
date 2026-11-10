@@ -1,11 +1,11 @@
 # Recorder
 
-A native Swift 6 / SwiftUI macOS screen recorder. The Recorder window records screens, windows and audio with ScreenCaptureKit and AVFoundation, keeping microphone and system audio as separate tracks. The Library window tracks finished recordings in a local SQLite database: history, renaming, title and date search, sorting, Finder actions, removal, deletion to the Trash, and missing-file handling. The Viewer window plays recordings with AVFoundation and AVKit: video and audio-only, with seeking, volume, speed, full screen, Finder actions and recovery from missing or damaged files. The Settings window manages local Whisper models: browse, download, verify, select and remove them. Recordings are transcribed offline with the selected model, automatically when a recording ends or on request, through a durable queue that always gives way to recording; transcripts show in the Viewer in step with playback and are saved beside the media as TXT, SRT and JSON. The app also has a Dock menu, menu bar recording indicator and app icon, and Swift Testing coverage. Embeddings and transcript search are planned and are not implemented.
+A native Swift 6 / SwiftUI macOS screen recorder. The Recorder window records screens, windows and audio with ScreenCaptureKit and AVFoundation, keeping microphone and system audio as separate tracks. The Library window tracks finished recordings in a local SQLite database: history, renaming, title and date search, sorting, Finder actions, removal, deletion to the Trash, and missing-file handling. The Viewer window plays recordings with AVFoundation and AVKit: video and audio-only, with seeking, volume, speed, full screen, Finder actions and recovery from missing or damaged files. The Settings window manages local Whisper models: browse, download, verify, select and remove them. Recordings are transcribed offline with the selected model, automatically when a recording ends or on request, through a durable queue that always gives way to recording; transcripts show in the Viewer in step with playback and are saved beside the media as TXT, SRT and JSON. A local language model, downloaded and selected in Settings like the Whisper models and run with MLX, summarizes transcripts on request in batches, keeping the notes on each part. The app also has a Dock menu, menu bar recording indicator and app icon, and Swift Testing coverage. Embeddings and transcript search are planned and are not implemented.
 
 ## Requirements
 
 - Apple Silicon Mac running macOS 15 or later.
-- Full Xcode 16 or later with Swift 6 and the macOS SDK. Verified versions are recorded in [verification](Docs/VERIFICATION.md).
+- Full Xcode 26 or later with Swift 6.2 and the macOS SDK, and its Metal Toolchain component, which MLX needs to compile its shaders (`make setup` installs it with `xcodebuild -downloadComponent MetalToolchain`). Verified versions are recorded in [verification](Docs/VERIFICATION.md).
 - Homebrew for SwiftLint (and swift-format if missing from the selected toolchain).
 
 Select your full Xcode installation using `xcode-select` if needed; accept its license and complete first launch. No development Team ID is committed.
@@ -37,6 +37,8 @@ Swift Package Manager is configured directly in Xcode. Exact releases are pinned
 
 - [argmax-oss-swift 1.1.1](https://github.com/argmaxinc/argmax-oss-swift/tree/v1.1.1): only the `WhisperKit` product.
 - [SQLiteVecKit 0.1.1](https://github.com/carlosypunto/SQLiteVecKit/tree/0.1.1): `SQLiteVecStore` product.
+- [mlx-swift-lm 3.31.4](https://github.com/ml-explore/mlx-swift-lm/tree/3.31.4): `MLXLLM` and `MLXLMCommon`, and [mlx-swift 0.31.4](https://github.com/ml-explore/mlx-swift/tree/0.31.4): `MLX`, for running language models. Later releases need Swift tools 6.3.
+- [swift-transformers 1.4.0](https://github.com/huggingface/swift-transformers/tree/1.4.0): `Tokenizers`, which reads a language model's tokenizer from its folder.
 
 Commit `Recorder.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` when updating packages. Initial resolution needs network access for package source; tests need no network, permissions, or models, and use only temporary databases, files and media they create. No AI model weights are bundled, and they are downloaded only when the user asks in Settings. Models load only for transcribing and are released when the queue runs out. At launch the transcription queue reads its jobs from the Library's database, which is otherwise opened on first use. It uses the system `SQLite3`, the library SQLiteVecKit also links; `VectorStore` itself is not used yet, because it freezes an embedding dimension into the database file. Import smoke tests check the libraries without initializing engines.
 
@@ -45,8 +47,8 @@ Apple frameworks are supplied by the macOS SDK: ScreenCaptureKit, AVFoundation, 
 ## Organization
 
 - `Recorder/Features/Recording`: the Recorder window (views, `RecorderViewModel`) and, under `Preview`, the sample data and scenarios for reviewing its design states.
-- `Recorder/Application`: `RecordingCoordinator`, which owns the recording lifecycle, `LibraryService`, which owns the library's use cases, `ModelManager`, which owns speech model state, `ProcessingCoordinator`, which owns the transcription queue, `AppPreferences`, and the contracts Infrastructure implements, including `PlaybackService`, `SpeechModelProviding` and `TranscriptionService`.
-- `Recorder/Infrastructure`: capture and media output, playback, the SQLite database, recording files and thumbnails, the WhisperKit adapters (`SpeechModels`, `Transcription`), preferences, permissions, login item.
+- `Recorder/Application`: `RecordingCoordinator`, which owns the recording lifecycle, `LibraryService`, which owns the library's use cases, `ModelManager`, which owns the state of one kind of model (speech or language), `ProcessingCoordinator`, which owns the transcription queue, `SummaryCoordinator` and `TranscriptSummarizer`, which own summaries, `AppPreferences` and `SummaryPreferences`, and the contracts Infrastructure implements, including `PlaybackService`, `ModelFileProviding`, `TranscriptionService` and `TextGenerator`.
+- `Recorder/Infrastructure`: capture and media output, playback, the SQLite database, recording files and thumbnails, the WhisperKit adapters (`SpeechModels`, `Transcription`), language model downloads (`LanguageModels`), the MLX adapter (`Summarization`), preferences, permissions, login item.
 - `Recorder/Features/Library`: the Library window (views, `LibraryViewModel`) and, under `Preview`, its sample recordings, simulated search and scenarios.
 - `Recorder/Features/Viewer`: the Viewer window, the app's player (views, `ViewerViewModel`) and, under `Preview`, its sample data and scenarios.
 - `Recorder/Features/Settings`: the Settings window (views, `SettingsViewModel`, `ModelSettingsViewModel`) and, under `Preview`, sample dependencies with simulated downloads, and scenarios.
@@ -83,6 +85,18 @@ TEST_RUNNER_RECORDER_E2E_SPEECH=/tmp/speech.aiff make test
 
 `TEST_RUNNER_RECORDER_E2E_MODEL_ID` picks the model (Tiny by default), and `TEST_RUNNER_RECORDER_E2E_LONG_MINUTES` adds a recording of that length, reporting speed and peak memory.
 
+## Summaries
+
+In the Viewer, switch the side panel to **Summary** and choose Summarize. The model selected in Settings › AI Models › Summaries reads the transcript in batches, writes notes on each, and combines them into a short summary in the Summary Language chosen in Settings › AI Models › Processing, whatever language was spoken (by default the Mac's own when it is offered, otherwise English); the notes on each part are kept, with the time span they cover, and selecting a part's time plays from there. Nothing is downloaded for it, and summaries stop while recording and wait for transcription. Settings › AI Models › Summary Settings uses each model's recommended values; turn on Customize Settings to change batch sizes and sampling, and Reset to Recommended to go back. Details are in [Implementation Status](Docs/IMPLEMENTATION.md).
+
+To run a real model, downloading it first through the app's own downloader (about 1 GB for the default Qwen3 1.7B):
+
+```sh
+TEST_RUNNER_RECORDER_E2E_LANGUAGE_MODELS=/tmp/language-models TEST_RUNNER_RECORDER_E2E_DOWNLOAD=1 make test
+```
+
+Without `TEST_RUNNER_RECORDER_E2E_DOWNLOAD=1` nothing is downloaded and the folder must already hold the model. `TEST_RUNNER_RECORDER_E2E_LANGUAGE_MODEL_ID` picks another catalog model.
+
 ## Recorder window design states
 
 The Recorder's “01 Recorder” design states can be reviewed with sample data and no capture. Choose a state with the launch argument `-RecorderPreviewScenario <state>` (Xcode: Product › Scheme › Edit Scheme › Arguments), from **Debug › Recorder State** in Debug builds, or in the SwiftUI previews of `RecorderWindowView`. **Debug › Recorder State › Live** returns to real capture. States: `idle`, `picker`, `recording`, `permission`, `mic`, `source`, `folder`, `disk`, `saved`. The window follows the system Light or Dark appearance and accent color.
@@ -107,9 +121,9 @@ The app has the design's icon (“04 Dock”). Clicking the Dock icon brings bac
 
 ## Settings window
 
-Open it with ⌘,, the Recorder's gear or the Dock menu. **General** holds Launch at Login, the menu bar icon, the Dock click and what closing the Recorder does. **AI Models** lists Whisper models to download, select and remove. **Storage** shows the recordings folder and the space recordings and models use. **About** shows the real version and build. Controls for things that don't exist yet, such as notifications and update checks, are left out rather than shown doing nothing. Details are in [Implementation Status](Docs/IMPLEMENTATION.md).
+Open it with ⌘,, the Recorder's gear or the Dock menu. **General** holds Launch at Login, the menu bar icon, the Dock click and what closing the Recorder does. **AI Models** lists Whisper models and summary models to download, select and remove, and the summary settings. **Storage** shows the recordings folder and the space recordings and models use. **About** shows the real version and build. Controls for things that don't exist yet, such as notifications and update checks, are left out rather than shown doing nothing. Details are in [Implementation Status](Docs/IMPLEMENTATION.md).
 
-Models live in `~/Library/Application Support/Verbatim/Models` (inside the container when sandboxed). They download only when you ask, keep working offline once installed, and are never loaded into memory by Settings. A running download pauses while you record and continues afterwards. The same tab holds the Transcription Language.
+Models live in `~/Library/Application Support/Verbatim/Models` and `…/Verbatim/LanguageModels` (inside the container when sandboxed). They download only when you ask, keep working offline once installed, and are never loaded into memory by Settings. A running download pauses while you record and continues afterwards. The same tab holds the Transcription Language.
 
 The “05 Settings” design states remain available with sample data and simulated downloads that touch nothing on disk. Choose a state with `-SettingsPreviewScenario <state>`, which also opens Settings at launch, from **Debug › Settings State** (**Live** returns to the real thing), or in the SwiftUI previews of `SettingsWindowView`. States: `general`, `models`, `removeModel`, `noModels`, `storage`, `about`, `licenses`.
 

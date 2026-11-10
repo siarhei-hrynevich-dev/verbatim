@@ -44,6 +44,66 @@ struct ThirdPartyLicense: Identifiable, Sendable {
             name: "swift-argument-parser",
             license: "Apache 2.0",
             url: URL(string: "https://github.com/apple/swift-argument-parser/blob/1.8.2/LICENSE.txt")
+        ),
+        ThirdPartyLicense(
+            name: "MLX Swift",
+            license: "MIT",
+            url: URL(string: "https://github.com/ml-explore/mlx-swift/blob/0.31.4/LICENSE")
+        ),
+        ThirdPartyLicense(
+            name: "MLX Swift LM",
+            license: "MIT",
+            url: URL(string: "https://github.com/ml-explore/mlx-swift-lm/blob/3.31.4/LICENSE")
+        ),
+        ThirdPartyLicense(
+            name: "Qwen3 models",
+            license: "Apache 2.0",
+            url: URL(string: "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/main/LICENSE")
+        ),
+        ThirdPartyLicense(
+            name: "swift-transformers",
+            license: "Apache 2.0",
+            url: URL(string: "https://github.com/huggingface/swift-transformers/blob/1.4.0/LICENSE")
+        ),
+        ThirdPartyLicense(
+            name: "swift-huggingface",
+            license: "Apache 2.0",
+            url: URL(string: "https://github.com/huggingface/swift-huggingface/blob/1.0.0/LICENSE")
+        ),
+        ThirdPartyLicense(
+            name: "swift-jinja",
+            license: "Apache 2.0",
+            url: URL(string: "https://github.com/huggingface/swift-jinja/blob/3.0.0/LICENSE")
+        ),
+        ThirdPartyLicense(
+            name: "swift-collections",
+            license: "Apache 2.0",
+            url: URL(string: "https://github.com/apple/swift-collections/blob/1.7.5/LICENSE.txt")
+        ),
+        ThirdPartyLicense(
+            name: "swift-crypto",
+            license: "Apache 2.0",
+            url: URL(string: "https://github.com/apple/swift-crypto/blob/4.5.2/LICENSE.txt")
+        ),
+        ThirdPartyLicense(
+            name: "swift-asn1",
+            license: "Apache 2.0",
+            url: URL(string: "https://github.com/apple/swift-asn1/blob/1.7.4/LICENSE.txt")
+        ),
+        ThirdPartyLicense(
+            name: "swift-numerics",
+            license: "Apache 2.0",
+            url: URL(string: "https://github.com/apple/swift-numerics/blob/1.1.1/LICENSE.txt")
+        ),
+        ThirdPartyLicense(
+            name: "yyjson",
+            license: "MIT",
+            url: URL(string: "https://github.com/ibireme/yyjson/blob/0.13.0/LICENSE")
+        ),
+        ThirdPartyLicense(
+            name: "EventSource",
+            license: "MIT",
+            url: URL(string: "https://github.com/mattt/EventSource/blob/1.6.0/LICENSE.md")
         )
     ]
 }

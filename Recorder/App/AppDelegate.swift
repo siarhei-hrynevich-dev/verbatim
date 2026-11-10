@@ -79,12 +79,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Reads metadata and file sizes only: no model is downloaded or loaded at launch. A job left unfinished by the
         // last run continues afterwards, and it is what loads a model, on demand.
         let modelManager = viewModels.modelManager
+        let languageModelManager = viewModels.languageModelManager
         let processing = viewModels.processing
+        let summaries = viewModels.summaries
         let resumesQueue = !Self.isHostingTests
         Task {
             await modelManager.reconcile()
+            await languageModelManager.reconcile()
             if resumesQueue {
                 await processing.start()
+                await summaries.start()
             }
         }
     }

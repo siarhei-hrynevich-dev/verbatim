@@ -8,7 +8,7 @@ struct ModelSettingsViewModelTests {
     private let tiny = ModelFixtures.tiny
     private let large = ModelFixtures.large
 
-    private func makeViewModel(_ harness: ModelManagerHarness) -> ModelSettingsViewModel {
+    private func makeViewModel(_ harness: ModelManagerHarness) -> ModelSettingsViewModel<SpeechModel> {
         ModelSettingsViewModel(manager: harness.manager, systemActions: FakeSystemActions())
     }
 

@@ -1,7 +1,8 @@
 import Foundation
 
 /// Asks the Hugging Face Hub which files make up a model. WhisperKit's public API exposes names but not sizes or
-/// hashes, and those are what make the disk space check, byte-accurate progress and verification possible.
+/// hashes, and those are what make the disk space check, byte-accurate progress and verification possible. Language
+/// models use the same listing, at a pinned commit.
 struct HubModelManifestClient: Sendable {
     typealias Fetch = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
@@ -9,7 +10,11 @@ struct HubModelManifestClient: Sendable {
     let endpoint: String
     private let fetch: Fetch
 
-    init(repository: String, endpoint: String, fetch: @escaping Fetch = HubModelManifestClient.fetchOverNetwork) {
+    init(
+        repository: String = "",
+        endpoint: String,
+        fetch: @escaping Fetch = HubModelManifestClient.fetchOverNetwork
+    ) {
         self.repository = repository
         self.endpoint = endpoint
         self.fetch = fetch
@@ -32,11 +37,34 @@ struct HubModelManifestClient: Sendable {
         )
     }
 
-    private func entries(in repository: String, folder: String?) async throws -> [HubTreeEntry] {
+    /// The files of a whole repository at a commit that `isIncluded` accepts, with paths under `folder` in the storage
+    /// folder.
+    func artifact(
+        ofRepository repository: String,
+        revision: String,
+        into folder: String,
+        isIncluded: (String) -> Bool
+    ) async throws -> ModelArtifact {
+        let entries = try await entries(in: repository, folder: nil, revision: revision).filter { isIncluded($0.path) }
+        guard !entries.isEmpty else {
+            throw ModelManagementError.modelUnavailable
+        }
+        return ModelArtifact(
+            files: entries.map { entry in
+                ModelArtifact.File(path: "\(folder)/\(entry.path)", sizeBytes: entry.size, sha256: entry.lfs?.oid)
+            }
+        )
+    }
+
+    private func entries(
+        in repository: String,
+        folder: String?,
+        revision: String = "main"
+    ) async throws -> [HubTreeEntry] {
         guard var url = URL(string: endpoint) else {
             throw ModelManagementError.downloadFailed(detail: "Invalid repository address: \(endpoint)")
         }
-        url.append(path: "api/models/\(repository)/tree/main", directoryHint: .notDirectory)
+        url.append(path: "api/models/\(repository)/tree/\(revision)", directoryHint: .notDirectory)
         if let folder {
             url.append(component: folder, directoryHint: .notDirectory)
         }

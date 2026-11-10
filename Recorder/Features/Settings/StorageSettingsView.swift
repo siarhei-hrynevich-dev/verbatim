@@ -181,7 +181,7 @@ struct StorageSettingsView: View {
         }
     }
 
-    private func unusedModelsLine(_ rows: [ModelSettingsViewModel.Row]) -> String {
+    private func unusedModelsLine(_ rows: [ModelSettingsViewModel<SpeechModel>.Row]) -> String {
         let names = rows.map(\.model.name).joined(separator: ", ")
         let bytes = rows.reduce(0) { $0 + ($1.sizeBytes ?? 0) }
         return String(localized: "\(names) · \(SettingsFormat.size(bytes: bytes))")

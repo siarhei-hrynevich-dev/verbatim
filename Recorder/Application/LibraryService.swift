@@ -13,8 +13,8 @@ final class LibraryService: FinishedRecordingRegistry {
     /// Advances whenever the library's contents change.
     private(set) var revision = 0
 
-    /// Told when a recording leaves, so work on it stops. Set once by App.
-    @ObservationIgnored weak var removalObserver: (any RecordingRemovalObserving)?
+    /// Told when a recording leaves, so work on it stops. Added by App; held weakly.
+    @ObservationIgnored private var removalObservers: [WeakRemovalObserver] = []
     @ObservationIgnored private let repository: any RecordingRepository
     @ObservationIgnored private let fileStore: any RecordingFileStore
     @ObservationIgnored private let thumbnails: any RecordingThumbnailProvider
@@ -30,6 +30,17 @@ final class LibraryService: FinishedRecordingRegistry {
         self.fileStore = fileStore
         self.thumbnails = thumbnails
         self.destinations = destinations
+    }
+
+    func addRemovalObserver(_ observer: any RecordingRemovalObserving) {
+        removalObservers.append(WeakRemovalObserver(observer: observer))
+    }
+
+    private func notifyRemoval(of id: UUID, permanently: Bool) {
+        removalObservers.removeAll { $0.observer == nil }
+        for entry in removalObservers {
+            entry.observer?.recordingRemoved(id, permanently: permanently)
+        }
     }
 
     // MARK: - Reading
@@ -177,7 +188,7 @@ final class LibraryService: FinishedRecordingRegistry {
     func removeFromLibrary(_ id: UUID) async throws -> LibraryRecording {
         let recording = try await existingRecording(id)
         try await repository.delete(id: id)
-        removalObserver?.recordingRemoved(id, permanently: false)
+        notifyRemoval(of: id, permanently: false)
         await thumbnails.discardThumbnail(for: id)
         revision += 1
         return recording
@@ -210,7 +221,7 @@ final class LibraryService: FinishedRecordingRegistry {
             Self.logger.error("A trashed recording's entry could not be removed: \(String(describing: error))")
             throw LibraryError.entryKeptAfterTrash(detail: String(describing: error))
         }
-        removalObserver?.recordingRemoved(id, permanently: true)
+        notifyRemoval(of: id, permanently: true)
         return filesLeftBehind
     }
 
@@ -255,4 +266,9 @@ extension LibraryService: RecordingsStorageProviding {
         let usedBytes = try await totalFileSize()
         return RecordingsStorage(location: location, recordingCount: recordingCount, usedBytes: usedBytes)
     }
+}
+
+/// Lets the Library tell several owners of work about a removal without keeping any of them alive.
+private struct WeakRemovalObserver {
+    weak var observer: (any RecordingRemovalObserving)?
 }

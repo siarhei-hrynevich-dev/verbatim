@@ -48,6 +48,14 @@ extension ViewerViewModel {
         !isPreviewing && storedTranscript?.segments.isEmpty == true
     }
 
+    /// Jumps to a transcript line, as clicking it does.
+    func seekToLine(at index: Int) {
+        guard lines.indices.contains(index) else {
+            return
+        }
+        seek(to: lines[index].start)
+    }
+
     func cancelProcessing() {
         if let recordingID {
             processing?.cancel(recordingID)
@@ -80,6 +88,7 @@ extension ViewerViewModel {
 
     /// Back to how a session starts, before anything has been read.
     func forgetTranscript() {
+        forgetSummary()
         storedTranscript = nil
         loadedTranscriptStamp = nil
         hasReadTranscript = false

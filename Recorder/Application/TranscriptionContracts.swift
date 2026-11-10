@@ -60,14 +60,14 @@ protocol TranscriptFileStore: Sendable {
     func availableBytes(besideMediaAt mediaURL: URL) async -> Int64?
 }
 
-/// Where transcription gets its model. Implemented by `ModelManager`, the only owner of model state.
+/// Where transcription gets its model. Implemented by the speech `ModelManager`, the only owner of its state.
 @MainActor
 protocol TranscriptionModelSource: AnyObject {
     /// Brings model state in line with the disk, so files removed since launch are noticed before they are needed.
     func prepareForUse() async
     /// Throws `ModelManagementError`; the caller reports it rather than choosing another model.
-    func acquireSelectedModel() throws(ModelManagementError) -> ModelLease
-    func release(_ lease: ModelLease)
+    func acquireSelectedModel() throws(ModelManagementError) -> SpeechModelLease
+    func release(_ lease: SpeechModelLease)
 }
 
 /// Takes in recordings that should be transcribed now that their media is safe.

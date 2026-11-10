@@ -107,11 +107,11 @@ The Viewer window plays recordings from the Library. The player is shared by vid
 
 ## Speech models (implemented)
 
-The AI Models tab downloads, verifies, selects and removes Whisper models, and chooses the transcription language.
+The AI Models tab downloads, verifies, selects and removes Whisper models, and chooses the transcription language. Since summaries, `ModelManager` is generic and the same lifecycle also serves language models; see [Summaries](#summaries-implemented).
 
 | Layer | Component | Responsibility |
 | --- | --- | --- |
-| Presentation | `ModelSettingsView`, `SpeechModelRow`, `ModelSettingsViewModel`, `ModelIssue` | The catalog, states, actions, confirmation, error wording. No file or network work. |
+| Presentation | `ModelSettingsView`, `ModelCatalogSection`, `ModelCatalogRow`, `ModelSettingsViewModel`, `ModelIssue` | The catalog, states, actions, confirmation, error wording. No file or network work. |
 | Application | `ModelManager` (with `+Installing`), `ModelFileWorkflow`, `RecordingPriorityPolicy`, `ModelContracts` | State and its transitions, the install steps, holding work back while recording, the interfaces below. |
 | Domain | `SpeechModel` | The catalog, `ModelInstallState` and its transitions, `ModelManagementError`, the registry, the resolved model and lease. |
 | Infrastructure | `WhisperModelProvider`, `ModelFileStore`, `HubModelManifestClient`, `JSONModelRegistryStore` | WhisperKit calls, the storage layout, the repository's file listings, the registry file. |
@@ -180,6 +180,35 @@ Offline transcription of recordings with an installed Whisper model. The design 
 
 **Limits.** Speech played through speakers can be picked up by the microphone too, and then appears under both sources, because no echo cancellation is applied. A hole inside a track, as after audio is dropped during capture, is closed up by the AAC encoder when recording: the file has no record of it, and picture and sound can differ there, as they do in playback. Stopping waits for the current prediction, and a model load can't be stopped at all. A restart begins the job again. WhisperKit does not decode audio shorter than a second.
 
+## Summaries (implemented)
+
+Summaries of transcripts written by a local language model. The design is in [ARCHITECTURE.md](ARCHITECTURE.md#summaries).
+
+| Layer | Component | Responsibility |
+| --- | --- | --- |
+| Presentation | `ViewerSummaryPanel`, `ViewerSidePanel`, `ViewerViewModel+Summary`, `SummaryIssue`; `ModelCatalogSection`, `ModelCatalogRow`, `SummarySettingsSection`, `SummarySettingsViewModel` | The Viewer's Summary panel; the Summaries catalog and Summary Settings in Settings › AI Models. |
+| Application | `SummaryCoordinator` (with `+Running`), `TranscriptSummarizer`, `SummaryPrompts`, `SummaryPreferences`, `LocalTextGenerationProvider`, `SummaryContracts`, `ModelManager<LanguageModel>` | The queue, batching and combining, prompts, settings, leasing and loading a model, the backend boundary. |
+| Domain | `LanguageModel`, `LanguageModelCatalog`, `SummarySettings`, `TranscriptSummary`, `SummaryPart`, `SummaryJob`, `SummaryFailure`, `SummaryBatching`, `InstallableModel` | The catalog and presets, settings ranges, results, job states, failures, batch splitting. |
+| Infrastructure | `HubLanguageModelProvider`, `HubFileDownloader`, `LanguageModelFileStore`, `MLXTextGenerationRuntime`, `SQLiteSummaryRepository`, `UserDefaultsSummarySettingsRepository` | Downloads, storage layout and verification, MLX, tables, settings. |
+
+**Catalog.** Qwen3 1.7B (about 1 GB, 8 GB of memory), Qwen3 4B Instruct 2507 (about 2.3 GB, recommended) and Qwen3 30B-A3B Instruct 2507 (about 17 GB, 32 GB of memory), the 4-bit MLX conversions from `mlx-community`, Apache 2.0, each pinned to a commit. Gemma 3 and Qwen3.5 are left out: their repositories hold vision-language configurations, and loading them as text models was not verified. Qwen3 1.7B is a hybrid reasoning model and is asked not to reason (`enable_thinking: false`).
+
+**Storage.** `~/Library/Application Support/Verbatim/LanguageModels/<model id>/`, excluded from backups, with `model-registry.json` beside the models. Only what loading needs is downloaded: JSON, safetensors, Jinja templates, merges and tokenizer models, not READMEs. Verification checks sizes, SHA-256 of the weights after a download, and that configuration, tokenizer and weights are present.
+
+**Installing and selecting.** As for speech models, through the same `ModelManager`: progress from bytes on disk, pausing for recordings, cancelling, retrying, repairing, the first installed model selected. A partial file continues from its length. Selection is stored as `summaries.selectedModelID`.
+
+**Settings.** Summary Settings shows the selected model's settings behind Customize Settings, off by default, which uses the model's preset. On, it offers batch size, notes per batch and summary length in tokens, temperature, top P, top K and repetition penalty, and Reset to Recommended. Values are clamped to their ranges and the batch to the model's context. Custom settings are stored per model as JSON in `summaries.customSettings`; an unreadable value resets to the preset.
+
+**Language.** Settings › AI Models › Processing › Summary Language chooses the language of every summary, independent of the transcription language and of what was spoken. It defaults to the first of the Mac's preferred languages that is offered, otherwise English, and is stored as `summaries.language` once chosen. A stored summary written in another language than the current setting is marked in the Viewer, with Summarize Again.
+
+**Summarizing.** Summarize in the Viewer's Summary panel queues the open recording. Batching and combining are described in Architecture. Progress shows the part being read, then combining and saving; Cancel stops at the next token. Failures (no model, unavailable model, load failure, no transcript, no speech, generation, saving) are worded by `SummaryIssue`, with Open Settings when Settings has to change. A summary older than the transcript is marked, with Summarize Again.
+
+**Storage of results.** Schema version 4 adds `summaries` (model, language, transcript creation time, date, text) and `summary_parts` (position, span, first and last segment, notes). Replacing is one transaction. Removing a recording keeps its summary until the next launch, so Undo brings it back; deleting it deletes the summary.
+
+**Viewer.** The side panel switches between Transcript and Summary. The summary renders inline Markdown and can be selected and copied, with each part's notes below; selecting a part's time plays from there.
+
+**Limits.** Jobs are not kept across launches. A transcription asked for while a summary runs can overlap it in memory. The models' quality on a given language is not checked by the app. Prompt editing is not offered. Summaries are not written as files beside the media and are not exported. A real-model check is opt-in (`SummaryEndToEndTests`, see the README).
+
 ## Settings window (implemented)
 
 | Layer | Component | Responsibility |
@@ -227,7 +256,7 @@ Shared design tokens and reusable controls live in `Shared/Design` and `Shared/C
 
 Recording is a Codable, Sendable metadata value with an identifier, creation date, nonblank title, finite nonnegative duration, and processing status. `RecordingMetadata` adds its files, sources and completion, and `LibraryRecording` adds its media reference and size. Database rows are validated when read; the sidecar is not read, and its synthesized Codable provides round trips only.
 
-The app target links WhisperKit and SQLiteVecStore. `WhisperModelProvider` uses only WhisperKit's static model APIs and its Hub client; `WhisperTranscriptionService` is the only thing that creates a `WhisperKit` instance, and SQLiteVecStore is not instantiated. The Library uses the system `SQLite3` directly.
+The app target links WhisperKit, SQLiteVecStore, MLX, MLXLLM, MLXLMCommon and Tokenizers. `WhisperModelProvider` uses only WhisperKit's static model APIs and its Hub client; `WhisperTranscriptionService` is the only thing that creates a `WhisperKit` instance, `MLXTextGenerationRuntime` the only thing that loads an MLX model, and SQLiteVecStore is not instantiated. The Library uses the system `SQLite3` directly.
 
 ## Tests
 
@@ -257,7 +286,8 @@ Swift Testing suites in `RecorderTests` cover:
 - The real decoder and chunker on media written for the test: layout, offsets, silence, bounded blocks, chunk order (`RecordingAudioReaderTests`).
 - The Viewer and Library on real jobs: display, highlight and seeking, following, export, status and actions (`TranscriptPresentationTests`).
 - Real recognition with a model on this Mac, off unless asked for, as described in the [README](../README.md#transcription) (`WhisperEndToEndTests`).
+- Summary rules: batching, settings ranges and presets, the catalog, out-of-date summaries, cleaning replies (`SummaryDomainTests`); batching and combining with generation replaced (`TranscriptSummarizerTests`); the queue on real databases: storing, failures, recording priority, waiting for transcription, cancelling, removal (`SummaryCoordinatorTests`); the tables (`SQLiteSummaryRepositoryTests`); presets, customizing, resetting, stored settings and the Settings view model (`SummarySettingsTests`); the language model folder on real files (`LanguageModelFileStoreTests`); the generic model lifecycle on the language catalog (`LanguageModelManagerTests`); a real model downloaded and run, off unless asked for (`SummaryEndToEndTests`).
 
 ## Not implemented yet
 
-No embedding models, transcript search or recovery of interrupted recordings exist yet. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.
+No embedding models, transcript search or recovery of interrupted recordings exist yet. Summaries run only on local MLX models; no server or API backend exists. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.

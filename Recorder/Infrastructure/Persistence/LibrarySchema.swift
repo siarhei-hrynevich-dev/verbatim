@@ -10,8 +10,9 @@ struct SQLiteMigration {
 /// The application database's schema, one migration per version. Add a migration for a change; never edit a released
 /// one. Vector indexes will get their own tables, referring to `recordings.id`.
 ///
-/// `transcripts` and `processing_jobs` refer to `recordings.id` without a foreign key: removing a recording from the
-/// Library can be undone, which must bring its transcript back. `purgeOrphans` clears them once it no longer can.
+/// `transcripts`, `processing_jobs` and `summaries` refer to `recordings.id` without a foreign key: removing a
+/// recording from the Library can be undone, which must bring its transcript and summary back. `purgeOrphans` clears
+/// them once it no longer can. `summary_parts` keep the time span and segments each part covers, for later indexing.
 enum LibrarySchema {
     static let migrations = [
         SQLiteMigration(
@@ -86,6 +87,29 @@ enum LibrarySchema {
                 INSERT INTO tags (id, name, name_key, color, position) VALUES
                     ('6F1D2A40-0000-4000-8000-000000000001', 'work', 'work', 'blue', 0),
                     ('6F1D2A40-0000-4000-8000-000000000002', 'personal', 'personal', 'green', 1);
+                """
+        ),
+        SQLiteMigration(
+            version: 4,
+            sql: """
+                CREATE TABLE summaries (
+                    recording_id TEXT PRIMARY KEY NOT NULL,
+                    model_id TEXT NOT NULL,
+                    language TEXT,
+                    transcript_created_at INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    text TEXT NOT NULL
+                );
+                CREATE TABLE summary_parts (
+                    recording_id TEXT NOT NULL REFERENCES summaries (recording_id) ON DELETE CASCADE,
+                    position INTEGER NOT NULL,
+                    start_time REAL NOT NULL CHECK (start_time >= 0),
+                    end_time REAL NOT NULL CHECK (end_time >= start_time),
+                    first_segment INTEGER NOT NULL,
+                    last_segment INTEGER NOT NULL CHECK (last_segment >= first_segment),
+                    text TEXT NOT NULL,
+                    PRIMARY KEY (recording_id, position)
+                );
                 """
         )
     ]

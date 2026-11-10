@@ -3,7 +3,7 @@ import os
 
 /// The steps of bringing a model onto the disk and comparing what is there with what should be. It keeps no state: all
 /// of that belongs to `ModelManager`, which decides what a result means for the model.
-struct ModelFileWorkflow: Sendable {
+struct ModelFileWorkflow<Model: InstallableModel>: Sendable {
     enum InstallEvent: Sendable {
         case progress(ModelDownloadProgress)
         case verifying
@@ -15,18 +15,18 @@ struct ModelFileWorkflow: Sendable {
     }
 
     struct CatalogSnapshot: Sendable {
-        let supportedIDs: Set<SpeechModel.ID>
-        let sizes: [SpeechModel.ID: Int64]
+        let supportedIDs: Set<Model.ID>
+        let sizes: [Model.ID: Int64]
         /// Some sizes could not be fetched, so what was saved earlier remains in use.
         let isOutdated: Bool
     }
 
-    let provider: any SpeechModelProviding
+    let provider: any ModelFileProviding<Model>
 
     /// Everything from checking the source to verified files. Cancelling stops it wherever it is, leaving partial files
     /// for the caller to keep or discard. Throws `ModelManagementError` or `CancellationError`.
     func install(
-        _ model: SpeechModel,
+        _ model: Model,
         onEvent: @escaping @Sendable (InstallEvent) -> Void
     ) async throws -> InstalledFiles {
         try Task.checkCancellation()
@@ -39,7 +39,7 @@ struct ModelFileWorkflow: Sendable {
         return InstalledFiles(artifact: artifact, sizeBytes: sizeBytes)
     }
 
-    private func checkDiskSpace(for artifact: ModelArtifact, of model: SpeechModel) async throws {
+    private func checkDiskSpace(for artifact: ModelArtifact, of model: Model) async throws {
         let downloaded = await provider.inspect(model).bytes
         let required = artifact.requiredFreeBytes(alreadyDownloaded: downloaded)
         let available = try await provider.availableCapacity()
@@ -50,7 +50,7 @@ struct ModelFileWorkflow: Sendable {
 
     /// What the disk says about a model. Only reads metadata and sizes, so it is cheap enough for every launch.
     func reconciledState(
-        of model: SpeechModel,
+        of model: Model,
         installation: ModelInstallation?,
         current: ModelInstallState
     ) async -> ModelInstallState {
@@ -74,9 +74,9 @@ struct ModelFileWorkflow: Sendable {
     }
 
     /// What this Mac supports and how large each model is, from the repository when it can be reached.
-    func fetchCatalog(of catalog: [SpeechModel]) async -> CatalogSnapshot {
+    func fetchCatalog(of catalog: [Model]) async -> CatalogSnapshot {
         let supportedIDs = await provider.fetchSupportedModelIDs()
-        var sizes: [SpeechModel.ID: Int64] = [:]
+        var sizes: [Model.ID: Int64] = [:]
         var isOutdated = false
         for model in catalog where supportedIDs.contains(model.id) {
             do {
@@ -91,5 +91,8 @@ struct ModelFileWorkflow: Sendable {
         return CatalogSnapshot(supportedIDs: supportedIDs, sizes: sizes, isOutdated: isOutdated)
     }
 
-    private static let logger = Logger(subsystem: "dev.local.Recorder", category: "Models")
+    /// Generic types cannot hold static stored properties.
+    private static var logger: Logger {
+        Logger(subsystem: "dev.local.Recorder", category: "Models")
+    }
 }

@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// One Whisper model: name, size, status chip and description, progress or failure while installing, and its actions.
-/// The selected model keeps a faint accent tint.
-struct SpeechModelRow: View {
-    let row: ModelSettingsViewModel.Row
-    let viewModel: ModelSettingsViewModel
+/// One model of a catalog: name, size, status chip and description, progress or failure while installing, and its
+/// actions. The selected model keeps a faint accent tint.
+struct ModelCatalogRow<Model: InstallableModel>: View {
+    let row: ModelSettingsViewModel<Model>.Row
+    let viewModel: ModelSettingsViewModel<Model>
 
     var body: some View {
         HStack(spacing: 14) {
@@ -25,7 +25,7 @@ struct SpeechModelRow: View {
                     .lineSpacing(1.5)
                     .foregroundStyle(VerbatimColor.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
-                caption(row.model.languageSupport)
+                caption(row.model.detail)
                 progress
             }
             .frame(maxWidth: .infinity, alignment: .leading)

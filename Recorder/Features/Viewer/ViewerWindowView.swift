@@ -22,7 +22,7 @@ struct ViewerWindowView: View {
                 .frame(minWidth: ViewerLayout.minimumPlayerWidth)
             if viewModel.recording != nil {
                 TranscriptResizeHandle(width: $transcriptWidth)
-                ViewerTranscriptPanel(viewModel: viewModel, actions: panelActions)
+                ViewerSidePanel(viewModel: viewModel, actions: panelActions)
                     .frame(width: transcriptWidth)
             }
         }

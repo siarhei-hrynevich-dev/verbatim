@@ -16,12 +16,25 @@ extension SettingsViewModel.Dependencies {
         if scenario == .models {
             modelManager.download("openai_whisper-small")
         }
+        let languageInstalledIDs = scenario == .noModels ? [] : [SimulatedLanguageModelProvider.sampleInstalledID]
+        let summarySettings = PreviewSummarySettingsRepository(selectedModelID: languageInstalledIDs.last)
+        let languageModelManager = LanguageModelManager(
+            catalog: LanguageModelCatalog.curated,
+            provider: SimulatedLanguageModelProvider(installedIDs: languageInstalledIDs),
+            registryStore: PreviewModelRegistryStore(
+                installations: languageInstalledIDs,
+                sizes: SimulatedLanguageModelProvider.sampleSizes
+            ),
+            selection: summarySettings
+        )
         return Self(
             preferences: AppPreferences(repository: repository),
             loginItem: PreviewLoginItem(),
             recordingsStorage: PreviewRecordingsStorage(),
             systemActions: PreviewSystemActions(),
             modelManager: modelManager,
+            languageModelManager: languageModelManager,
+            summaryPreferences: SummaryPreferences(repository: summarySettings),
             metadata: AppMetadata(version: "1.2.0", build: "142"),
             chooseRecordingsFolder: { _ in }
         )
@@ -93,7 +106,7 @@ private struct SimulatedModelProvider: SpeechModelProviding {
         return ModelDiskInspection(hasFiles: isInstalled, bytes: isInstalled ? Self.sampleSizes[model.id] ?? 0 : 0)
     }
 
-    func removeFiles(of model: SpeechModel, includingTokenizer: Bool) async throws {}
+    func removeFiles(of model: SpeechModel, includingSharedFiles: Bool) async throws {}
 
     func resolve(_ model: SpeechModel) -> ResolvedSpeechModel {
         ResolvedSpeechModel(id: model.id, modelFolder: storageLocation, tokenizerBase: storageLocation)
@@ -104,21 +117,23 @@ private struct SimulatedModelProvider: SpeechModelProviding {
     }
 
     static func artifact(of id: SpeechModel.ID) -> ModelArtifact {
-        ModelArtifact(
-            files: [ModelArtifact.File(path: "sample/\(id)", sizeBytes: sampleSizes[id] ?? 0, sha256: nil)]
-        )
+        SimulatedArtifacts.artifact(of: id, sizes: sampleSizes)
     }
 }
 
 private final class PreviewModelRegistryStore: ModelRegistryStore {
     private let registry: ModelRegistry
 
-    init(installedIDs: [SpeechModel.ID]) {
-        var registry = ModelRegistry(artifactSizes: SimulatedModelProvider.sampleSizes)
+    convenience init(installedIDs: [SpeechModel.ID]) {
+        self.init(installations: installedIDs, sizes: SimulatedModelProvider.sampleSizes)
+    }
+
+    init(installations installedIDs: [String], sizes: [String: Int64]) {
+        var registry = ModelRegistry(artifactSizes: sizes)
         for id in installedIDs {
             registry.installations[id] = ModelInstallation(
                 installedAt: .distantPast,
-                artifact: SimulatedModelProvider.artifact(of: id)
+                artifact: SimulatedArtifacts.artifact(of: id, sizes: sizes)
             )
         }
         self.registry = registry
@@ -188,4 +203,10 @@ private struct PreviewSystemActions: SystemActions {
     func openInFinder(_ url: URL) async {}
     func revealInFinder(_ url: URL) async {}
     func openFile(_ url: URL) async -> Bool { false }
+}
+
+private enum SimulatedArtifacts {
+    static func artifact(of id: String, sizes: [String: Int64]) -> ModelArtifact {
+        ModelArtifact(files: [ModelArtifact.File(path: "sample/\(id)", sizeBytes: sizes[id] ?? 0, sha256: nil)])
+    }
 }

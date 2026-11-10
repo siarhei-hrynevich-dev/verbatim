@@ -2,17 +2,27 @@ import Foundation
 import Observation
 
 /// Keeps model work out of the way of capture: from the moment a recording starts preparing until its media is safe,
-/// the model manager holds back downloads and verification, and transcription stops and waits.
+/// both model managers hold back downloads and verification, and transcription and summaries stop and wait.
 @MainActor
 final class RecordingPriorityPolicy {
     private let coordinator: RecordingCoordinator
-    private let models: ModelManager
+    private let speechModels: SpeechModelManager
+    private let languageModels: LanguageModelManager
     private let processing: ProcessingCoordinator
+    private let summaries: SummaryCoordinator
 
-    init(coordinator: RecordingCoordinator, models: ModelManager, processing: ProcessingCoordinator) {
+    init(
+        coordinator: RecordingCoordinator,
+        speechModels: SpeechModelManager,
+        languageModels: LanguageModelManager,
+        processing: ProcessingCoordinator,
+        summaries: SummaryCoordinator
+    ) {
         self.coordinator = coordinator
-        self.models = models
+        self.speechModels = speechModels
+        self.languageModels = languageModels
         self.processing = processing
+        self.summaries = summaries
     }
 
     func start() {
@@ -24,7 +34,9 @@ final class RecordingPriorityPolicy {
                 self?.start()
             }
         }
-        models.setRecordingActive(isRecordingActive)
+        speechModels.setRecordingActive(isRecordingActive)
+        languageModels.setRecordingActive(isRecordingActive)
         processing.setRecordingActive(isRecordingActive)
+        summaries.setRecordingActive(isRecordingActive)
     }
 }

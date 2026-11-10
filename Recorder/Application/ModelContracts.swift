@@ -1,39 +1,40 @@
 import Foundation
 
-/// Speech model files and their source. Failures are `ModelManagementError`, or `CancellationError` once cancelled.
-/// Nothing here loads a model into memory.
-protocol SpeechModelProviding: Sendable {
-    /// The folder that holds every model file, for showing it in Finder.
+/// One kind of model's files and their source. Failures are `ModelManagementError`, or `CancellationError` once
+/// cancelled. Nothing here loads a model into memory.
+protocol ModelFileProviding<Model>: Sendable {
+    associatedtype Model: InstallableModel
+
+    /// The folder that holds every model file of this kind, for showing it in Finder.
     var storageLocation: URL { get }
 
-    /// What this Mac supports according to the table built into the model library. No network or disk access.
-    func supportedModelIDs() -> Set<SpeechModel.ID>
+    /// What this Mac supports, without network or disk access.
+    func supportedModelIDs() -> Set<Model.ID>
     /// The same, updated from the repository when it can be reached.
-    func fetchSupportedModelIDs() async -> Set<SpeechModel.ID>
+    func fetchSupportedModelIDs() async -> Set<Model.ID>
     /// Asks the repository which files a model consists of.
-    func fetchArtifact(of model: SpeechModel) async throws -> ModelArtifact
+    func fetchArtifact(of model: Model) async throws -> ModelArtifact
     func availableCapacity() async throws -> Int64
 
-    /// Downloads whatever is still missing, along with the tokenizer needed to use the model offline. Finishing does
+    /// Downloads whatever is still missing, along with anything else needed to use the model offline. Finishing does
     /// not mean the result is usable; that is what `verify` is for.
     func download(
-        _ model: SpeechModel,
+        _ model: Model,
         artifact: ModelArtifact,
         onProgress: @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws
     /// Compares the disk with an artifact, and returns the space the model occupies.
-    func verify(
-        _ model: SpeechModel,
-        against artifact: ModelArtifact,
-        depth: ModelVerificationDepth
-    ) async throws -> Int64
-    func inspect(_ model: SpeechModel) async -> ModelDiskInspection
-    /// Removes a model's own files, complete or partial. A shared tokenizer stays unless asked for.
-    func removeFiles(of model: SpeechModel, includingTokenizer: Bool) async throws
-    func resolve(_ model: SpeechModel) -> ResolvedSpeechModel
+    func verify(_ model: Model, against artifact: ModelArtifact, depth: ModelVerificationDepth) async throws -> Int64
+    func inspect(_ model: Model) async -> ModelDiskInspection
+    /// Removes a model's own files, complete or partial. Files shared with other models stay unless asked for.
+    func removeFiles(of model: Model, includingSharedFiles: Bool) async throws
+    func resolve(_ model: Model) -> Model.Resolved
     /// The total space used in the storage folder, in bytes.
     func diskUsage() async -> Int64
 }
+
+/// Speech model files: WhisperKit's repository and layout, implemented by `WhisperModelProvider`.
+protocol SpeechModelProviding: ModelFileProviding where Model == SpeechModel {}
 
 /// Keeps the model registry across launches. A missing registry is an empty one.
 protocol ModelRegistryStore: Sendable {
@@ -41,12 +42,16 @@ protocol ModelRegistryStore: Sendable {
     func save(_ registry: ModelRegistry) async throws
 }
 
-/// Persists user choices made in Settings.
-protocol SettingsRepository: Sendable {
+/// Remembers which model of one kind is selected.
+protocol ModelSelectionStore: Sendable {
+    func loadSelectedModelID() -> String?
+    func saveSelectedModelID(_ id: String?)
+}
+
+/// Persists user choices made in Settings, and the selected speech model.
+protocol SettingsRepository: ModelSelectionStore {
     func loadSettings() -> AppSettings
     func saveSettings(_ settings: AppSettings)
-    func loadSelectedModelID() -> SpeechModel.ID?
-    func saveSelectedModelID(_ id: SpeechModel.ID?)
 }
 
 /// Whether the app opens at login.

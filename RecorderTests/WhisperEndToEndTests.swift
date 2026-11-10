@@ -31,10 +31,10 @@ struct WhisperEndToEndTests {
         }
 
         func prepareForUse() async {}
-        func acquireSelectedModel() throws(ModelManagementError) -> ModelLease {
-            ModelLease(id: UUID(), model: model)
+        func acquireSelectedModel() throws(ModelManagementError) -> SpeechModelLease {
+            SpeechModelLease(id: UUID(), model: model)
         }
-        func release(_ lease: ModelLease) {}
+        func release(_ lease: SpeechModelLease) {}
     }
 
     private let environment: LibraryTestEnvironment

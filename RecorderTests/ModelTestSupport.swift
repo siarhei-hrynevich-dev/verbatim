@@ -109,8 +109,8 @@ final class FakeModelProvider: SpeechModelProviding {
         )
     }
 
-    func removeFiles(of model: SpeechModel, includingTokenizer: Bool) async throws {
-        update { $0.removals.append((model.id, includingTokenizer)) }
+    func removeFiles(of model: SpeechModel, includingSharedFiles: Bool) async throws {
+        update { $0.removals.append((model.id, includingSharedFiles)) }
         if let error = read(\.removeError) {
             throw error
         }
@@ -231,7 +231,7 @@ struct ModelManagerHarness {
     let provider: FakeModelProvider
     let registryStore: InMemoryModelRegistryStore
     let settings: InMemorySettingsRepository
-    let manager: ModelManager
+    let manager: SpeechModelManager
 
     init(
         provider: FakeModelProvider = FakeModelProvider(),

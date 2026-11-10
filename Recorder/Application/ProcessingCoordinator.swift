@@ -64,6 +64,11 @@ final class ProcessingCoordinator {
         jobs[recordingID]
     }
 
+    /// Something is queued or running. Observable, for work that waits until transcription is done.
+    var hasActiveJobs: Bool {
+        jobs.values.contains { $0.state.isActive }
+    }
+
     func isStopping(_ recordingID: UUID) -> Bool {
         stoppingRecordingID == recordingID
     }

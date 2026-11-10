@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// Confirms removing a speech model: states the space freed, that transcripts are kept and what happens to the
-/// selection.
-/// Escape cancels.
-struct RemoveModelSheet: View {
-    let request: ModelSettingsViewModel.RemovalRequest
+/// Confirms removing a model: states the space freed, that recordings and what was made from them are kept, and what
+/// happens to the selection. Escape cancels.
+struct RemoveModelSheet<Model: InstallableModel>: View {
+    let request: ModelSettingsViewModel<Model>.RemovalRequest
     let cancel: () -> Void
     let remove: () -> Void
 
@@ -27,7 +26,9 @@ struct RemoveModelSheet: View {
     }
 
     private var message: String {
-        let kept = String(localized: "Recordings and transcripts are kept, and you can download it again at any time.")
+        let kept = String(
+            localized: "Recordings, transcripts and summaries are kept, and you can download it again at any time."
+        )
         let freed = request.reclaimedBytes.map {
             String(localized: "This frees about \(SettingsFormat.size(bytes: $0)) on this Mac.")
         }

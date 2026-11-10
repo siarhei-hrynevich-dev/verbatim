@@ -111,7 +111,7 @@ final class FakeModelSource: TranscriptionModelSource {
         prepareCount += 1
     }
 
-    func acquireSelectedModel() throws(ModelManagementError) -> ModelLease {
+    func acquireSelectedModel() throws(ModelManagementError) -> SpeechModelLease {
         if let failure {
             throw failure
         }
@@ -121,10 +121,10 @@ final class FakeModelSource: TranscriptionModelSource {
             modelFolder: URL(filePath: "/models/tiny", directoryHint: .isDirectory),
             tokenizerBase: URL(filePath: "/models", directoryHint: .isDirectory)
         )
-        return ModelLease(id: UUID(), model: model)
+        return SpeechModelLease(id: UUID(), model: model)
     }
 
-    func release(_ lease: ModelLease) {
+    func release(_ lease: SpeechModelLease) {
         leasesHeld -= 1
     }
 }
@@ -183,7 +183,7 @@ struct ProcessingTestEnvironment {
                 language: { language }
             )
         )
-        service.removalObserver = coordinator
+        service.addRemovalObserver(coordinator)
     }
 
     /// A restart: new objects on the same disk.
