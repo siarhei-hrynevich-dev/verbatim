@@ -8,11 +8,12 @@ struct SQLiteMigration {
 }
 
 /// The application database's schema, one migration per version. Add a migration for a change; never edit a released
-/// one. Vector indexes will get their own tables, referring to `recordings.id`.
+/// one.
 ///
-/// `transcripts`, `processing_jobs` and `summaries` refer to `recordings.id` without a foreign key: removing a
-/// recording from the Library can be undone, which must bring its transcript and summary back. `purgeOrphans` clears
-/// them once it no longer can. `summary_parts` keep the time span and segments each part covers, for later indexing.
+/// `transcripts`, `processing_jobs`, `summaries` and the search index refer to `recordings.id` without a foreign key:
+/// removing a recording from the Library can be undone, which must bring its transcript and summary back.
+/// `purgeOrphans` clears them once it no longer can. `summary_parts` keep the time span and segments each part covers,
+/// which search chunks of the kind `summary_part` repeat.
 enum LibrarySchema {
     static let migrations = [
         SQLiteMigration(
@@ -111,8 +112,69 @@ enum LibrarySchema {
                     PRIMARY KEY (recording_id, position)
                 );
                 """
-        )
+        ),
+        SQLiteMigration(version: 5, sql: searchIndexSQL)
     ]
+
+    /// The search index: chunks of transcripts and summaries (`search_chunks`), their full-text index
+    /// (`search_chunks_fts`, kept in step by triggers), and their vectors by embedding space (`chunk_embeddings`).
+    ///
+    /// Chunks do not depend on the embedding model, so words can be searched without one, and a new model only adds
+    /// vectors in a space of its own. A vector is a BLOB of `dimensions` little-endian Float32 values, normalized to
+    /// length 1 so that a dot product is the cosine similarity. Chunk identifiers come from AUTOINCREMENT and are never
+    /// reused, so a result handed to an agent keeps naming the same text or nothing. `search_index_state` records what
+    /// each recording's chunks were made from. Like transcripts, chunks refer to `recordings.id` without a foreign key.
+    private static let searchIndexSQL = """
+        CREATE TABLE search_index_state (
+            recording_id TEXT PRIMARY KEY NOT NULL,
+            transcript_created_at INTEGER,
+            summary_created_at INTEGER,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE search_chunks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recording_id TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK (kind IN ('transcript', 'summary', 'summary_part')),
+            position INTEGER NOT NULL CHECK (position >= 0),
+            start_time REAL CHECK (start_time >= 0),
+            end_time REAL CHECK (end_time >= start_time),
+            first_segment INTEGER,
+            last_segment INTEGER CHECK (last_segment >= first_segment),
+            text TEXT NOT NULL,
+            UNIQUE (recording_id, kind, position)
+        );
+        CREATE VIRTUAL TABLE search_chunks_fts USING fts5 (
+            text,
+            content = 'search_chunks',
+            content_rowid = 'id',
+            tokenize = 'unicode61 remove_diacritics 2'
+        );
+        CREATE TRIGGER search_chunks_after_insert AFTER INSERT ON search_chunks BEGIN
+            INSERT INTO search_chunks_fts (rowid, text) VALUES (new.id, new.text);
+        END;
+        CREATE TRIGGER search_chunks_after_delete AFTER DELETE ON search_chunks BEGIN
+            INSERT INTO search_chunks_fts (search_chunks_fts, rowid, text) VALUES ('delete', old.id, old.text);
+        END;
+        CREATE TRIGGER search_chunks_after_update AFTER UPDATE OF text ON search_chunks BEGIN
+            INSERT INTO search_chunks_fts (search_chunks_fts, rowid, text) VALUES ('delete', old.id, old.text);
+            INSERT INTO search_chunks_fts (rowid, text) VALUES (new.id, new.text);
+        END;
+        CREATE TABLE embedding_spaces (
+            id INTEGER PRIMARY KEY,
+            model_id TEXT NOT NULL,
+            revision TEXT NOT NULL,
+            dimensions INTEGER NOT NULL CHECK (dimensions > 0),
+            created_at INTEGER NOT NULL,
+            UNIQUE (model_id, revision, dimensions)
+        );
+        CREATE TABLE chunk_embeddings (
+            space_id INTEGER NOT NULL REFERENCES embedding_spaces (id) ON DELETE CASCADE,
+            chunk_id INTEGER NOT NULL REFERENCES search_chunks (id) ON DELETE CASCADE,
+            vector BLOB NOT NULL,
+            PRIMARY KEY (space_id, chunk_id)
+        ) WITHOUT ROWID;
+        CREATE INDEX chunk_embeddings_chunk_id ON chunk_embeddings (chunk_id);
+        """
 
     /// Opens the database file and brings it up to date. A database that cannot be opened or migrated is left in place
     /// and reported, never recreated. Each repository holds its own connection; WAL lets them work side by side.

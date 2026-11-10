@@ -51,6 +51,7 @@ struct SettingsWindowView: View {
             ModelSettingsView(
                 speech: viewModel.models,
                 summaries: viewModel.summaries,
+                search: viewModel.search,
                 language: $viewModel.transcriptionLanguage
             )
         case .storage:

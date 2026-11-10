@@ -48,6 +48,8 @@ final class ProcessingCoordinator {
     /// The running job has been asked to stop, and may take a moment to reach a point where it can.
     private(set) var stoppingRecordingID: UUID?
 
+    /// Told once a transcript has been stored, for the work that follows it: a summary, then indexing for search.
+    @ObservationIgnored var onTranscriptStored: (@MainActor (UUID) -> Void)?
     @ObservationIgnored let dependencies: Dependencies
     @ObservationIgnored var active: ActiveJob?
     @ObservationIgnored private var hasLoaded = false

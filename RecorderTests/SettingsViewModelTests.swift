@@ -20,6 +20,7 @@ struct SettingsViewModelTests {
                 systemActions: systemActions,
                 modelManager: ModelManagerHarness(settings: repository).manager,
                 languageModelManager: LanguageModelHarness().manager,
+                embeddingModelManager: .empty(),
                 summaryPreferences: SummaryPreferences(repository: InMemorySummarySettingsRepository()),
                 metadata: AppMetadata(version: "0.1.0", build: "7"),
                 chooseRecordingsFolder: chooseFolder

@@ -28,7 +28,7 @@ enum LibraryFilter: Hashable, Sendable {
             return item.recordedAt >= start
         case .processing:
             switch item.status {
-            case .pending, .transcribing, .indexing: return true
+            case .pending, .transcribing, .summarizing, .indexing, .waiting: return true
             case .recorded, .failed: return item.canStartProcessing
             case .ready, .missing: return false
             }

@@ -80,15 +80,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // last run continues afterwards, and it is what loads a model, on demand.
         let modelManager = viewModels.modelManager
         let languageModelManager = viewModels.languageModelManager
+        let embeddingModelManager = viewModels.embeddingModelManager
         let processing = viewModels.processing
         let summaries = viewModels.summaries
+        let indexing = viewModels.indexing
         let resumesQueue = !Self.isHostingTests
         Task {
             await modelManager.reconcile()
             await languageModelManager.reconcile()
+            await embeddingModelManager.reconcile()
             if resumesQueue {
                 await processing.start()
                 await summaries.start()
+                await indexing.start()
             }
         }
     }

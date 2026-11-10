@@ -14,6 +14,7 @@ final class SettingsViewModel {
         let systemActions: any SystemActions
         let modelManager: SpeechModelManager
         let languageModelManager: LanguageModelManager
+        let embeddingModelManager: EmbeddingModelManager
         let summaryPreferences: SummaryPreferences
         let metadata: AppMetadata
         /// Goes through the Recorder, which owns the recordings folder and shows it in its footer.
@@ -27,6 +28,7 @@ final class SettingsViewModel {
 
     private(set) var models: ModelSettingsViewModel<SpeechModel>
     private(set) var summaries: SummarySettingsViewModel
+    private(set) var search: ModelSettingsViewModel<EmbeddingModel>
     private(set) var loginItemStatus = LoginItemStatus.disabled
     /// `nil` until first read, or when it could not be read.
     private(set) var recordingsStorage: RecordingsStorage?
@@ -39,6 +41,10 @@ final class SettingsViewModel {
         liveDependencies = dependencies
         models = ModelSettingsViewModel(manager: dependencies.modelManager, systemActions: dependencies.systemActions)
         summaries = Self.makeSummaries(dependencies)
+        search = ModelSettingsViewModel(
+            manager: dependencies.embeddingModelManager,
+            systemActions: dependencies.systemActions
+        )
         if let previewScenario {
             apply(previewScenario)
         }
@@ -129,7 +135,7 @@ final class SettingsViewModel {
     // MARK: - Storage
 
     var modelsBytes: Int64 {
-        models.storageUsageBytes + summaries.models.storageUsageBytes
+        models.storageUsageBytes + summaries.models.storageUsageBytes + search.storageUsageBytes
     }
 
     var totalBytes: Int64 {
@@ -147,6 +153,7 @@ final class SettingsViewModel {
         }
         await models.refresh()
         await summaries.models.refresh()
+        await search.refresh()
     }
 
     func chooseRecordingsFolder(_ url: URL) {
@@ -217,6 +224,7 @@ final class SettingsViewModel {
         dependencies = next
         models = ModelSettingsViewModel(manager: next.modelManager, systemActions: next.systemActions)
         summaries = Self.makeSummaries(next)
+        search = ModelSettingsViewModel(manager: next.embeddingModelManager, systemActions: next.systemActions)
         recordingsStorage = nil
         refreshLoginItemStatus()
     }

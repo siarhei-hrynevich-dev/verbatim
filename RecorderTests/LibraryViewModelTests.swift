@@ -224,3 +224,57 @@ struct LibraryPreviewScenarioTests {
         #expect(LibraryPreviewScenario.fromLaunchArguments(defaults) == nil)
     }
 }
+
+struct LibraryProcessingStepTests {
+    private let recordingID = UUID()
+
+    private func summary(_ state: SummaryJob.State) -> SummaryJob {
+        SummaryJob(recordingID: recordingID, state: state, queuedAt: .now)
+    }
+
+    private func index(_ state: IndexingJob.State) -> IndexingJob {
+        IndexingJob(recordingID: recordingID, state: state, queuedAt: .now)
+    }
+
+    @Test func aRecordingWithNothingAfterTranscriptionStaysAsItIs() {
+        #expect(LibraryItem.Status(summary: nil, indexing: nil) == nil)
+        #expect(LibraryItem.Status(summary: summary(.failed(.noModelSelected)), indexing: nil) == nil)
+        #expect(LibraryItem.Status(summary: nil, indexing: index(.failed(.noModelSelected))) == nil)
+    }
+
+    @Test(arguments: [
+        (SummaryJob.State.loadingModel, 0.0),
+        (.summarizingParts(completed: 1, total: 4), 0.2),
+        (.combining, 0.8),
+        (.saving, 1.0)
+    ])
+    func aSummaryShowsItsProgressAsTheSecondStep(state: SummaryJob.State, fraction: Double) {
+        let status = LibraryItem.Status(summary: summary(state), indexing: index(.queued))
+
+        #expect(status == .summarizing(progress: fraction))
+        #expect(status?.stepFraction == "2/3")
+    }
+
+    @Test func indexingShowsTheChunksEmbeddedAsTheThirdStep() {
+        let status = LibraryItem.Status(summary: nil, indexing: index(.embedding(completed: 3, total: 12)))
+
+        #expect(status == .indexing(progress: 0.25))
+        #expect(status?.stepFraction == "3/3")
+        #expect(LibraryItem.Status(summary: nil, indexing: index(.chunking)) == .indexing(progress: 0))
+    }
+
+    @Test func aRunningStepComesBeforeAQueuedOne() {
+        #expect(
+            LibraryItem.Status(summary: summary(.queued), indexing: index(.chunking)) == .indexing(progress: 0)
+        )
+        #expect(LibraryItem.Status(summary: summary(.queued), indexing: index(.queued)) == .waiting(.summary))
+        #expect(LibraryItem.Status(summary: nil, indexing: index(.queued)) == .waiting(.indexing))
+    }
+
+    @Test func transcriptionIsTheFirstStepAndAFinishedRecordingHasNone() {
+        #expect(LibraryItem.Status.transcribing(progress: 0.5).stepFraction == "1/3")
+        #expect(LibraryItem.Status.pending.step == .transcription)
+        #expect(LibraryItem.Status.ready.step == nil)
+        #expect(LibraryItem.Status.waiting(.indexing).stepDescription == "Step 3 of 3: search index")
+    }
+}

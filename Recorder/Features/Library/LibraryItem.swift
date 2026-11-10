@@ -14,13 +14,32 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
         case pending
         /// `progress` is a fraction from 0 to 1.
         case transcribing(progress: Double)
-        /// `progress` is a fraction from 0 to 1.
+        /// Transcribed, and being summarized. `progress` is a fraction from 0 to 1.
+        case summarizing(progress: Double)
+        /// Transcribed, and being indexed for search. `progress` is a fraction from 0 to 1.
         case indexing(progress: Double)
+        /// Transcribed, with a later step queued behind other work.
+        case waiting(ProcessingStep)
         /// Saved without a transcript, for example with auto-transcription off.
         case recorded
         case failed
         /// The recording folder is no longer where the Library expects it.
         case missing
+    }
+
+    /// The steps after a recording, in the order they run. A step without a model selected is skipped.
+    enum ProcessingStep: Int, CaseIterable, Sendable {
+        case transcription = 1
+        case summary
+        case indexing
+
+        var number: Int {
+            rawValue
+        }
+
+        static var count: Int {
+            allCases.count
+        }
     }
 
     let id: UUID
@@ -71,16 +90,16 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
 
     var hasTranscript: Bool {
         switch status {
-        case .ready, .indexing: true
+        case .ready, .summarizing, .indexing, .waiting: true
         case .pending, .transcribing, .recorded, .failed, .missing: hasStoredTranscript
         }
     }
 
-    /// Progress of the transcript or search index, while one is being built.
+    /// Progress of the transcript, summary or search index, while one is being made.
     var processingProgress: Double? {
         switch status {
-        case .transcribing(let progress), .indexing(let progress): progress
-        case .ready, .pending, .recorded, .failed, .missing: nil
+        case .transcribing(let progress), .summarizing(let progress), .indexing(let progress): progress
+        case .ready, .pending, .waiting, .recorded, .failed, .missing: nil
         }
     }
 
@@ -88,7 +107,7 @@ struct LibraryItem: Identifiable, Equatable, Sendable {
     var isProcessing: Bool {
         switch status {
         case .pending, .transcribing: offersRetranscription
-        case .ready, .indexing, .recorded, .failed, .missing: false
+        case .ready, .summarizing, .indexing, .waiting, .recorded, .failed, .missing: false
         }
     }
 
@@ -188,6 +207,55 @@ extension LibraryItem.Status {
         case .indexing: self = .indexing(progress: 0)
         case .ready: self = .ready
         case .failed: self = .failed
+        }
+    }
+}
+
+extension LibraryItem.Status {
+    /// Which step of processing this status is part of, while one is queued or running.
+    var step: LibraryItem.ProcessingStep? {
+        switch self {
+        case .pending, .transcribing: .transcription
+        case .summarizing: .summary
+        case .indexing: .indexing
+        case .waiting(let step): step
+        case .ready, .recorded, .failed, .missing: nil
+        }
+    }
+
+    /// The step after transcription that a transcribed recording is in, if any. A running step comes before a queued
+    /// one, and a summary before the index, which waits for it. Failures are left to the Viewer and Settings.
+    init?(summary: SummaryJob?, indexing: IndexingJob?) {
+        switch (summary?.state, indexing?.state) {
+        case (let state?, _) where state.isActive && state != .queued:
+            self = .summarizing(progress: Self.fraction(of: state))
+        case (_, let state?) where state.isActive && state != .queued:
+            self = .indexing(progress: Self.fraction(of: state))
+        case (.queued?, _):
+            self = .waiting(.summary)
+        case (_, .queued?):
+            self = .waiting(.indexing)
+        default:
+            return nil
+        }
+    }
+
+    /// Writing notes on the parts takes most of a summary; combining them and saving take the rest.
+    private static func fraction(of state: SummaryJob.State) -> Double {
+        switch state {
+        case .summarizingParts(let completed, let total) where total > 0:
+            0.8 * Double(completed) / Double(total)
+        case .combining: 0.8
+        case .saving: 1
+        case .queued, .loadingModel, .summarizingParts, .failed: 0
+        }
+    }
+
+    private static func fraction(of state: IndexingJob.State) -> Double {
+        switch state {
+        case .embedding(let completed, let total) where total > 0:
+            Double(completed) / Double(total)
+        case .queued, .chunking, .embedding, .failed: 0
         }
     }
 }

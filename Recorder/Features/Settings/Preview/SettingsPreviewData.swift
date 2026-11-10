@@ -16,14 +16,18 @@ extension SettingsViewModel.Dependencies {
         if scenario == .models {
             modelManager.download("openai_whisper-small")
         }
-        let languageInstalledIDs = scenario == .noModels ? [] : [SimulatedLanguageModelProvider.sampleInstalledID]
+        let languageInstalledIDs = scenario == .noModels ? [] : [SimulatedHubModels.languageInstalledID]
         let summarySettings = PreviewSummarySettingsRepository(selectedModelID: languageInstalledIDs.last)
         let languageModelManager = LanguageModelManager(
             catalog: LanguageModelCatalog.curated,
-            provider: SimulatedLanguageModelProvider(installedIDs: languageInstalledIDs),
+            provider: SimulatedHubModelProvider(
+                catalog: LanguageModelCatalog.curated,
+                sizes: SimulatedHubModels.languageSizes,
+                installedIDs: languageInstalledIDs
+            ),
             registryStore: PreviewModelRegistryStore(
                 installations: languageInstalledIDs,
-                sizes: SimulatedLanguageModelProvider.sampleSizes
+                sizes: SimulatedHubModels.languageSizes
             ),
             selection: summarySettings
         )
@@ -34,9 +38,27 @@ extension SettingsViewModel.Dependencies {
             systemActions: PreviewSystemActions(),
             modelManager: modelManager,
             languageModelManager: languageModelManager,
+            embeddingModelManager: previewEmbeddingModels(for: scenario),
             summaryPreferences: SummaryPreferences(repository: summarySettings),
             metadata: AppMetadata(version: "1.2.0", build: "142"),
             chooseRecordingsFolder: { _ in }
+        )
+    }
+
+    private static func previewEmbeddingModels(for scenario: SettingsPreviewScenario) -> EmbeddingModelManager {
+        let installedIDs = scenario == .noModels ? [] : [SimulatedHubModels.embeddingInstalledID]
+        return EmbeddingModelManager(
+            catalog: EmbeddingModelCatalog.curated,
+            provider: SimulatedHubModelProvider(
+                catalog: EmbeddingModelCatalog.curated,
+                sizes: SimulatedHubModels.embeddingSizes,
+                installedIDs: installedIDs
+            ),
+            registryStore: PreviewModelRegistryStore(
+                installations: installedIDs,
+                sizes: SimulatedHubModels.embeddingSizes
+            ),
+            selection: PreviewSummarySettingsRepository(selectedModelID: installedIDs.last)
         )
     }
 }

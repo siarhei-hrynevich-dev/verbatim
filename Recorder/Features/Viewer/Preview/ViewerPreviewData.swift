@@ -32,7 +32,7 @@ struct ViewerPreviewData: Sendable {
 
     private static func transcriptState(for status: LibraryItem.Status) -> ViewerRecording.TranscriptState {
         switch status {
-        case .ready, .indexing, .missing: .ready
+        case .ready, .summarizing, .indexing, .waiting, .missing: .ready
         case .transcribing(let progress): .processing(progress: progress)
         case .failed: .failed(stoppedAt: failurePosition)
         case .recorded, .pending: .notProcessed

@@ -56,6 +56,7 @@ extension ProcessingCoordinator {
         await writeFiles(of: transcript, besideMediaAt: media.url)
         setState(.completed, of: recordingID)
         Self.logger.info("Transcribed a recording into \(transcript.segments.count) segments")
+        onTranscriptStored?(recordingID)
     }
 
     private func checkDiskSpace(besideMediaAt mediaURL: URL) async throws {

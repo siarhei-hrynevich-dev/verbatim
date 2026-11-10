@@ -32,7 +32,7 @@ struct HubFileDownloader: Sendable {
         if Self.length(of: destination) == expectedBytes {
             return
         }
-        let partial = LanguageModelFileStore.partialFile(for: destination)
+        let partial = HubModelFiles.partialFile(for: destination)
         var offset = Self.length(of: partial) ?? 0
         if offset > expectedBytes {
             try? FileManager.default.removeItem(at: partial)

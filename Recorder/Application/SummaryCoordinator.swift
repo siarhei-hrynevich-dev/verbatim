@@ -44,6 +44,8 @@ final class SummaryCoordinator {
     private(set) var revision = 0
     private(set) var isRecordingActive = false
 
+    /// Told once a summary has been stored, for work that follows it, such as indexing.
+    @ObservationIgnored var onSummaryStored: (@MainActor (UUID) -> Void)?
     @ObservationIgnored let dependencies: Dependencies
     @ObservationIgnored var active: ActiveJob?
     @ObservationIgnored private var hasStarted = false
@@ -61,6 +63,11 @@ final class SummaryCoordinator {
 
     func job(for recordingID: UUID) -> SummaryJob? {
         jobs[recordingID]
+    }
+
+    /// Something is queued or running. Observable, for work that waits until summaries are done.
+    var hasActiveJobs: Bool {
+        jobs.values.contains { $0.state.isActive }
     }
 
     func isStopping(_ recordingID: UUID) -> Bool {
@@ -104,6 +111,15 @@ final class SummaryCoordinator {
         }
         jobs[recordingID] = SummaryJob(recordingID: recordingID, state: .queued, queuedAt: dependencies.now())
         startNextJob()
+    }
+
+    /// Queues a summary of a transcript that has just been made, when a language model is ready to write it. Without
+    /// one nothing happens: summaries are never a reason to download or switch models.
+    func enqueueIfModelReady(_ recordingID: UUID) {
+        guard dependencies.generation.hasUsableModel else {
+            return
+        }
+        enqueue(recordingID)
     }
 
     /// Stops the summary. A queued one stops at once; a running one at its next token, leaving nothing behind.
@@ -193,6 +209,7 @@ final class SummaryCoordinator {
     func completed(_ recordingID: UUID) {
         jobs[recordingID] = nil
         revision += 1
+        onSummaryStored?(recordingID)
     }
 
     static let logger = Logger(subsystem: "dev.local.Recorder", category: "Summaries")

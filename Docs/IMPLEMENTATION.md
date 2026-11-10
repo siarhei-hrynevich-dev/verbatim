@@ -170,7 +170,7 @@ Offline transcription of recordings with an installed Whisper model. The design 
 
 **Progress.** Audio finished out of all audio to transcribe, across tracks, which moves about every 30 seconds of audio. Preparing and saving are shown as stages without a percentage. Nothing is estimated from elapsed time.
 
-**Library.** Status shows Not Transcribed, Pending, Transcribing with progress, Ready or Failed with the reason in a tooltip, and updates without reloading by hand: state changes advance `revision`, and progress joins the stored status in the view model. The Processing section lists queued, running and failed recordings. A failed re-transcription shows Failed while the earlier transcript stays available.
+**Library.** Status shows Not Transcribed, Pending, Transcribing with progress, Ready or Failed with the reason in a tooltip, and updates without reloading by hand: state changes advance `revision`, and progress joins the stored status in the view model. The Processing section lists queued, running and failed recordings. A failed re-transcription shows Failed while the earlier transcript stays available. Once a recording is Ready, the same column follows the steps after it, which live in memory only: Summarizing and Indexing with progress, or Summary queued and Indexing queued. While a step runs, the number of the step shows next to its progress bar (`1/3` transcript, `2/3` summary, `3/3` search index). A step without a model selected is skipped. Summary and indexing failures are shown in the Viewer and Settings, not in the row.
 
 **Viewer.** Lines show the start time, source and text. Playback highlights the last line started; the panel redraws only when that changes, and rows are lazy. Selecting a line seeks to its start. Scrolling by hand pauses following, and Follow Playback resumes it. Without lines, the panel shows the job's real state, with Cancel, Retry or Generate Transcript. While a replacement runs or after it fails, a banner sits above the existing lines. Copy and Export work from the stored transcript. An open recording picks up a new transcript when its job completes.
 
@@ -189,7 +189,7 @@ Summaries of transcripts written by a local language model. The design is in [AR
 | Presentation | `ViewerSummaryPanel`, `ViewerSidePanel`, `ViewerViewModel+Summary`, `SummaryIssue`; `ModelCatalogSection`, `ModelCatalogRow`, `SummarySettingsSection`, `SummarySettingsViewModel` | The Viewer's Summary panel; the Summaries catalog and Summary Settings in Settings › AI Models. |
 | Application | `SummaryCoordinator` (with `+Running`), `TranscriptSummarizer`, `SummaryPrompts`, `SummaryPreferences`, `LocalTextGenerationProvider`, `SummaryContracts`, `ModelManager<LanguageModel>` | The queue, batching and combining, prompts, settings, leasing and loading a model, the backend boundary. |
 | Domain | `LanguageModel`, `LanguageModelCatalog`, `SummarySettings`, `TranscriptSummary`, `SummaryPart`, `SummaryJob`, `SummaryFailure`, `SummaryBatching`, `InstallableModel` | The catalog and presets, settings ranges, results, job states, failures, batch splitting. |
-| Infrastructure | `HubLanguageModelProvider`, `HubFileDownloader`, `LanguageModelFileStore`, `MLXTextGenerationRuntime`, `SQLiteSummaryRepository`, `UserDefaultsSummarySettingsRepository` | Downloads, storage layout and verification, MLX, tables, settings. |
+| Infrastructure | `HubModelProvider<LanguageModel>`, `HubFileDownloader`, `HubModelFileStore<LanguageModel>`, `MLXTextGenerationRuntime`, `TransformersTokenizerLoader`, `SQLiteSummaryRepository`, `UserDefaultsSummarySettingsRepository` | Downloads, storage layout and verification, MLX, tables, settings. |
 
 **Catalog.** Qwen3 1.7B (about 1 GB, 8 GB of memory), Qwen3 4B Instruct 2507 (about 2.3 GB, recommended) and Qwen3 30B-A3B Instruct 2507 (about 17 GB, 32 GB of memory), the 4-bit MLX conversions from `mlx-community`, Apache 2.0, each pinned to a commit. Gemma 3 and Qwen3.5 are left out: their repositories hold vision-language configurations, and loading them as text models was not verified. Qwen3 1.7B is a hybrid reasoning model and is asked not to reason (`enable_thinking: false`).
 
@@ -201,13 +201,36 @@ Summaries of transcripts written by a local language model. The design is in [AR
 
 **Language.** Settings › AI Models › Processing › Summary Language chooses the language of every summary, independent of the transcription language and of what was spoken. It defaults to the first of the Mac's preferred languages that is offered, otherwise English, and is stored as `summaries.language` once chosen. A stored summary written in another language than the current setting is marked in the Viewer, with Summarize Again.
 
-**Summarizing.** Summarize in the Viewer's Summary panel queues the open recording. Batching and combining are described in Architecture. Progress shows the part being read, then combining and saving; Cancel stops at the next token. Failures (no model, unavailable model, load failure, no transcript, no speech, generation, saving) are worded by `SummaryIssue`, with Open Settings when Settings has to change. A summary older than the transcript is marked, with Summarize Again.
+**Summarizing.** A transcript that has just been stored is summarized automatically when a language model is selected and installed (`SummaryCoordinator.enqueueIfModelReady`); without one nothing happens and nothing downloads. Summarize in the Viewer's Summary panel queues the open recording. Batching and combining are described in Architecture. Progress shows the part being read, then combining and saving; Cancel stops at the next token. Failures (no model, unavailable model, load failure, no transcript, no speech, generation, saving) are worded by `SummaryIssue`, with Open Settings when Settings has to change. A summary older than the transcript is marked, with Summarize Again.
 
 **Storage of results.** Schema version 4 adds `summaries` (model, language, transcript creation time, date, text) and `summary_parts` (position, span, first and last segment, notes). Replacing is one transaction. Removing a recording keeps its summary until the next launch, so Undo brings it back; deleting it deletes the summary.
 
 **Viewer.** The side panel switches between Transcript and Summary. The summary renders inline Markdown and can be selected and copied, with each part's notes below; selecting a part's time plays from there.
 
 **Limits.** Jobs are not kept across launches. A transcription asked for while a summary runs can overlap it in memory. The models' quality on a given language is not checked by the app. Prompt editing is not offered. Summaries are not written as files beside the media and are not exported. A real-model check is opt-in (`SummaryEndToEndTests`, see the README).
+
+## Search index (implemented)
+
+Every recording's transcript and summary are indexed for search by meaning and by words. The design, the schema and the planned MCP server are in [ARCHITECTURE.md](ARCHITECTURE.md#search-index).
+
+| Layer | Component | Responsibility |
+| --- | --- | --- |
+| Presentation | `ModelCatalogSection` with `ModelSettingsViewModel<EmbeddingModel>` | The Semantic Search catalog in Settings › AI Models. |
+| Application | `IndexingCoordinator` (with `+Running`), `RecordingSearchService`, `LocalEmbeddingProvider`, `SearchContracts`, `ModelManager<EmbeddingModel>` | The indexing queue, hybrid search, sharing one loaded model, the boundaries to embedding backends and the index. |
+| Domain | `EmbeddingModel`, `EmbeddingModelCatalog`, `EmbeddingSpace`, `SearchChunk`, `SearchChunker`, `SearchIndexState`, `RecordingSearchQuery`/`Filter`/`Hit`/`Result`, `SearchRanking`, `IndexingJob`, `IndexingFailure`, `HubHostedModel` | Models and their vector spaces, chunking, search values, rank fusion, job states, failures. |
+| Infrastructure | `SQLiteSearchIndexRepository` (with `+Search`), `VectorMatrix`, `MLXEmbeddingRuntime`, `HubModelProvider<EmbeddingModel>`, `UserDefaultsEmbeddingSelectionStore` | Tables, FTS5 and exact vector search, MLX inference, downloads, the selection. |
+
+**Pipeline.** When a transcript is stored, `ProcessingCoordinator.onTranscriptStored` queues a summary (if a language model is ready) and indexing; when a summary is stored, `SummaryCoordinator.onSummaryStored` queues indexing again. Indexing waits while transcription or a summary is queued or running, so in practice it runs last, and never alongside another post-processing model. A job makes chunks again only for whichever of the transcript and summary changed, then embeds the chunks that have no vector in the selected model's space, eight at a time, storing each batch.
+
+**Catalog.** Multilingual E5 Small (384 dimensions, about 470 MB, recommended) and Multilingual E5 Base (768 dimensions, about 1.1 GB), from `intfloat`, MIT, each pinned to a commit and loaded with `MLXEmbedders`. Both read 100 languages, so a question in English finds Russian speech. Queries and passages get the `query: ` and `passage: ` prefixes the models were trained with; vectors are mean-pooled and normalized. Stored in `Verbatim/EmbeddingModels/<model id>/`; only top-level files and `1_Pooling/config.json` are downloaded, not the ONNX and OpenVINO copies. Selection is stored as `search.selectedModelID`.
+
+**Without a model.** Chunks and the full-text index are built anyway, so words are searchable. Once a model is installed and selected, `IndexingCoordinator` notices the ready space under observation and queues every recording that lacks vectors in it; vectors of other models are deleted.
+
+**Search.** `RecordingSearchService.search` runs FTS5 (words as quoted prefixes, BM25) and, unless recording, the query's vector against the in-memory matrix of the selected space, each for four times the requested results, combines them by reciprocal rank fusion and returns chunks with their recording's title, date, kind, time span and segment range, how each was matched and its cosine similarity. Filters: recordings, creation dates, tags, chunk kinds. Its `semanticStatus` says whether meaning was used and why not. The model stays loaded for a minute after its last use and goes at once when a recording starts.
+
+**Recovery.** Jobs live in memory. At launch, and when the model changes, `search_index_state` and missing vectors show what to queue again. A recording that leaves the Library keeps its index until the next launch, or loses it at once when deleted to the Trash, like a transcript.
+
+**Limits.** No window searches the index yet: `RecordingSearchService` is built and tested for the MCP server described in Architecture, which does not exist yet. Index progress is not shown in Settings. Search is exact rather than approximate, which is fast enough for thousands of hours. A real-model check is opt-in (`EmbeddingEndToEndTests`, see the README).
 
 ## Settings window (implemented)
 
@@ -223,9 +246,9 @@ Summaries of transcripts written by a local language model. The design is in [AR
 
 **About.** Version and build from the bundle. The licenses list names what the app actually ships, and each row opens its published text.
 
-**Semantic Search.** A static section saying it isn't available yet: no embedding model is installed and no index is built.
+**Semantic Search.** The embedding model catalog, with the same download, select and remove actions as the other catalogs. See [Search index](#search-index-implemented).
 
-**Left out because nothing backs them yet.** Notify When Processing Finishes, Postpone on Battery Power, Check for Updates and its automatic toggle, moving existing recordings, Preview Cache, Search Index and Missing Recordings figures. They return as their features do.
+**Left out because nothing backs them yet.** Notify When Processing Finishes, Postpone on Battery Power, Check for Updates and its automatic toggle, moving existing recordings, Preview Cache, Search Index size and Missing Recordings figures. They return as their features do.
 
 ## Windows (design scenarios)
 
@@ -256,7 +279,7 @@ Shared design tokens and reusable controls live in `Shared/Design` and `Shared/C
 
 Recording is a Codable, Sendable metadata value with an identifier, creation date, nonblank title, finite nonnegative duration, and processing status. `RecordingMetadata` adds its files, sources and completion, and `LibraryRecording` adds its media reference and size. Database rows are validated when read; the sidecar is not read, and its synthesized Codable provides round trips only.
 
-The app target links WhisperKit, SQLiteVecStore, MLX, MLXLLM, MLXLMCommon and Tokenizers. `WhisperModelProvider` uses only WhisperKit's static model APIs and its Hub client; `WhisperTranscriptionService` is the only thing that creates a `WhisperKit` instance, `MLXTextGenerationRuntime` the only thing that loads an MLX model, and SQLiteVecStore is not instantiated. The Library uses the system `SQLite3` directly.
+The app target links WhisperKit, SQLiteVecStore, MLX, MLXLLM, MLXLMCommon, MLXEmbedders and Tokenizers. `WhisperModelProvider` uses only WhisperKit's static model APIs and its Hub client; `WhisperTranscriptionService` is the only thing that creates a `WhisperKit` instance, `MLXTextGenerationRuntime` and `MLXEmbeddingRuntime` the only things that load MLX models, and SQLiteVecStore is not instantiated. The Library uses the system `SQLite3` directly.
 
 ## Tests
 
@@ -286,8 +309,9 @@ Swift Testing suites in `RecorderTests` cover:
 - The real decoder and chunker on media written for the test: layout, offsets, silence, bounded blocks, chunk order (`RecordingAudioReaderTests`).
 - The Viewer and Library on real jobs: display, highlight and seeking, following, export, status and actions (`TranscriptPresentationTests`).
 - Real recognition with a model on this Mac, off unless asked for, as described in the [README](../README.md#transcription) (`WhisperEndToEndTests`).
-- Summary rules: batching, settings ranges and presets, the catalog, out-of-date summaries, cleaning replies (`SummaryDomainTests`); batching and combining with generation replaced (`TranscriptSummarizerTests`); the queue on real databases: storing, failures, recording priority, waiting for transcription, cancelling, removal (`SummaryCoordinatorTests`); the tables (`SQLiteSummaryRepositoryTests`); presets, customizing, resetting, stored settings and the Settings view model (`SummarySettingsTests`); the language model folder on real files (`LanguageModelFileStoreTests`); the generic model lifecycle on the language catalog (`LanguageModelManagerTests`); a real model downloaded and run, off unless asked for (`SummaryEndToEndTests`).
+- Summary rules: batching, settings ranges and presets, the catalog, out-of-date summaries, cleaning replies (`SummaryDomainTests`); batching and combining with generation replaced (`TranscriptSummarizerTests`); the queue on real databases: storing, failures, recording priority, waiting for transcription, cancelling, removal (`SummaryCoordinatorTests`); the tables (`SQLiteSummaryRepositoryTests`); presets, customizing, resetting, stored settings and the Settings view model (`SummarySettingsTests`); the language model folder on real files (`LanguageModelFileStoreTests`); the generic model lifecycle on the language catalog (`LanguageModelManagerTests`); a real model downloaded and run, off unless asked for (`SummaryEndToEndTests`); queuing a summary after transcription and telling indexing (`SummaryCoordinatorTests`).
+- Search rules: chunking transcripts and summaries, rank fusion, full-text expressions, the vector matrix and its stored form (`SearchIndexDomainTests`); the index on real databases: outdated recordings, full-text search in Russian and English, nearest vectors with date and tag filters, replaced chunks and their vectors, other models' vectors, removed recordings (`SQLiteSearchIndexRepositoryTests`); the indexing queue with a fake embedder: chunking and embedding, waiting for transcription and summaries, catching up once a model is ready, summaries without embedding the transcript again, recording priority, failures, removal; and hybrid search with and without a model and while recording (`IndexingCoordinatorTests`); a real embedding model downloaded and run, off unless asked for (`EmbeddingEndToEndTests`).
 
 ## Not implemented yet
 
-No embedding models, transcript search or recovery of interrupted recordings exist yet. Summaries run only on local MLX models; no server or API backend exists. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.
+No MCP server, no search window over the index, and no recovery of interrupted recordings exist yet. Summaries run only on local MLX models; no server or API backend exists. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.

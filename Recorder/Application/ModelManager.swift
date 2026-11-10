@@ -314,6 +314,7 @@ final class ModelManager<Model: InstallableModel> {
 
 typealias SpeechModelManager = ModelManager<SpeechModel>
 typealias LanguageModelManager = ModelManager<LanguageModel>
+typealias EmbeddingModelManager = ModelManager<EmbeddingModel>
 
 extension ModelManager where Model == SpeechModel {
     convenience init(

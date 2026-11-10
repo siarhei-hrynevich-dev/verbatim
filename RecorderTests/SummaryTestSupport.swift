@@ -69,6 +69,7 @@ final class FakeTextGenerationProvider: TextGenerationProvider {
     let generator = FakeTextGenerator()
     var settings = LanguageModelCatalog.curated[1].preset
     var acquireFailure: (any Error)?
+    var hasUsableModel = true
     private(set) var acquired = 0
     private(set) var released = 0
 

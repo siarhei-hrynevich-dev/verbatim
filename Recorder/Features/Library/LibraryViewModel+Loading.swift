@@ -117,4 +117,27 @@ extension LibraryViewModel {
             self.selectedItemID = nil
         }
     }
+
+    /// Progress changes too often to go through the database, so it joins the stored status here, as do the summary
+    /// and search index, which are only ever in memory.
+    func withMeasuredProgress(_ item: LibraryItem) -> LibraryItem {
+        var measured = item
+        switch item.status {
+        case .transcribing:
+            guard let fraction = processing?.progress[item.id] else {
+                return item
+            }
+            measured.status = .transcribing(progress: fraction)
+        case .ready:
+            let summary = summaries?.job(for: item.id)
+            let index = indexing?.job(for: item.id)
+            guard let status = LibraryItem.Status(summary: summary, indexing: index) else {
+                return item
+            }
+            measured.status = status
+        default:
+            return item
+        }
+        return measured
+    }
 }

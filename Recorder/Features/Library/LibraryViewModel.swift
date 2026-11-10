@@ -89,6 +89,9 @@ final class LibraryViewModel {
     @ObservationIgnored let service: LibraryService?
     /// Read for status and progress, which change while the window is open.
     @ObservationIgnored let processing: ProcessingCoordinator?
+    /// Read for the steps after transcription, shown on recordings that are otherwise ready.
+    @ObservationIgnored let summaries: SummaryCoordinator?
+    @ObservationIgnored let indexing: IndexingCoordinator?
     let previewData: LibraryPreviewData
     private let fixedNow: Date?
     let calendar: Calendar
@@ -97,11 +100,15 @@ final class LibraryViewModel {
     init(
         service: LibraryService,
         processing: ProcessingCoordinator? = nil,
+        summaries: SummaryCoordinator? = nil,
+        indexing: IndexingCoordinator? = nil,
         previewScenario: LibraryPreviewScenario? = nil,
         calendar: Calendar = .current
     ) {
         self.service = service
         self.processing = processing
+        self.summaries = summaries
+        self.indexing = indexing
         previewData = .sample()
         fixedNow = nil
         self.calendar = calendar
@@ -121,6 +128,8 @@ final class LibraryViewModel {
     ) {
         service = nil
         processing = nil
+        summaries = nil
+        indexing = nil
         self.previewData = previewData
         fixedNow = now
         self.calendar = calendar
@@ -234,7 +243,7 @@ final class LibraryViewModel {
             switch item.status {
             case .transcribing: transcribing += 1
             case .indexing: indexing += 1
-            case .ready, .pending, .recorded, .failed, .missing: break
+            case .ready, .pending, .summarizing, .waiting, .recorded, .failed, .missing: break
             }
         }
         return (transcribing, indexing)
@@ -270,16 +279,6 @@ final class LibraryViewModel {
 
     var trimmedSearchText: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Progress changes too often to go through the database, so it joins the stored status here.
-    private func withMeasuredProgress(_ item: LibraryItem) -> LibraryItem {
-        guard case .transcribing = item.status, let fraction = processing?.progress[item.id] else {
-            return item
-        }
-        var measured = item
-        measured.status = .transcribing(progress: fraction)
-        return measured
     }
 
     private var previewContent: Content {

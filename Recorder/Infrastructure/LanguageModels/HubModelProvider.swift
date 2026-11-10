@@ -1,50 +1,47 @@
 import Foundation
 
-/// Language model files from the Hugging Face Hub, at the commit each catalog entry pins. The app downloads them itself
-/// rather than through the MLX library, so a download happens only when the user asks, pauses for recordings, is
-/// verified against the repository's hashes, and loading later finds everything on disk without the network.
-struct HubLanguageModelProvider: ModelFileProviding {
+/// Model files from the Hugging Face Hub, at the commit each catalog entry pins: language models, and embedding models
+/// alike. The app downloads them itself rather than through the MLX library, so a download happens only when the user
+/// asks, pauses for recordings, is verified against the repository's hashes, and loading later finds everything on disk
+/// without the network.
+struct HubModelProvider<Model: HubHostedModel>: ModelFileProviding {
     let storageLocation: URL
 
-    private let files: LanguageModelFileStore
+    private let catalog: [Model]
+    private let files: HubModelFileStore<Model>
     private let manifests: HubModelManifestClient
     private let downloader: HubFileDownloader
     private let physicalMemoryBytes: UInt64
 
     init(
+        catalog: [Model],
         storageLocation: URL,
-        endpoint: String = HubLanguageModelProvider.defaultEndpoint,
+        endpoint: String = HubEndpoint.default,
         physicalMemoryBytes: UInt64 = ProcessInfo.processInfo.physicalMemory
     ) {
+        self.catalog = catalog
         self.storageLocation = storageLocation
         self.physicalMemoryBytes = physicalMemoryBytes
-        files = LanguageModelFileStore(root: storageLocation)
+        files = HubModelFileStore(root: storageLocation)
         manifests = HubModelManifestClient(endpoint: endpoint)
         downloader = HubFileDownloader(endpoint: endpoint)
     }
 
-    /// Application Support, inside the container when sandboxed, beside the speech models but in a folder of its own.
-    static func defaultStorageLocation() -> URL {
-        URL.applicationSupportDirectory.appending(path: "Verbatim/LanguageModels", directoryHint: .isDirectory)
-    }
-
-    static let defaultEndpoint = "https://huggingface.co"
-
     /// What fits this Mac's memory. Every catalog model runs on Apple Silicon otherwise.
-    func supportedModelIDs() -> Set<LanguageModel.ID> {
-        Set(LanguageModelCatalog.curated.filter { $0.minimumMemoryBytes <= physicalMemoryBytes }.map(\.id))
+    func supportedModelIDs() -> Set<Model.ID> {
+        Set(catalog.filter { $0.minimumMemoryBytes <= physicalMemoryBytes }.map(\.id))
     }
 
-    func fetchSupportedModelIDs() async -> Set<LanguageModel.ID> {
+    func fetchSupportedModelIDs() async -> Set<Model.ID> {
         supportedModelIDs()
     }
 
-    func fetchArtifact(of model: LanguageModel) async throws -> ModelArtifact {
+    func fetchArtifact(of model: Model) async throws -> ModelArtifact {
         try await manifests.artifact(
             ofRepository: model.repository,
             revision: model.revision,
             into: model.id,
-            isIncluded: LanguageModelFileStore.isNeeded
+            isIncluded: HubModelFiles.isNeeded
         )
     }
 
@@ -54,7 +51,7 @@ struct HubLanguageModelProvider: ModelFileProviding {
 
     /// One file at a time, measured on disk four times a second. Complete files are kept and partial ones continue.
     func download(
-        _ model: LanguageModel,
+        _ model: Model,
         artifact: ModelArtifact,
         onProgress: @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws {
@@ -89,23 +86,23 @@ struct HubLanguageModelProvider: ModelFileProviding {
     }
 
     func verify(
-        _ model: LanguageModel,
+        _ model: Model,
         against artifact: ModelArtifact,
         depth: ModelVerificationDepth
     ) async throws -> Int64 {
         try files.verify(model, against: artifact, depth: depth)
     }
 
-    func inspect(_ model: LanguageModel) async -> ModelDiskInspection {
+    func inspect(_ model: Model) async -> ModelDiskInspection {
         files.inspect(model)
     }
 
-    /// Language models share no files.
-    func removeFiles(of model: LanguageModel, includingSharedFiles: Bool) async throws {
+    /// Hub models share no files.
+    func removeFiles(of model: Model, includingSharedFiles: Bool) async throws {
         try files.removeFiles(of: model)
     }
 
-    func resolve(_ model: LanguageModel) -> ResolvedLanguageModel {
+    func resolve(_ model: Model) -> Model.Resolved {
         files.resolve(model)
     }
 
@@ -113,5 +110,44 @@ struct HubLanguageModelProvider: ModelFileProviding {
         files.totalUsedBytes()
     }
 
-    private static let progressInterval = Duration.milliseconds(250)
+    private static var progressInterval: Duration {
+        .milliseconds(250)
+    }
+}
+
+typealias HubLanguageModelProvider = HubModelProvider<LanguageModel>
+typealias HubEmbeddingModelProvider = HubModelProvider<EmbeddingModel>
+
+enum HubEndpoint {
+    static let `default` = "https://huggingface.co"
+}
+
+extension HubModelProvider where Model == LanguageModel {
+    init(
+        storageLocation: URL,
+        endpoint: String = HubEndpoint.default,
+        physicalMemoryBytes: UInt64 = ProcessInfo.processInfo.physicalMemory
+    ) {
+        self.init(
+            catalog: LanguageModelCatalog.curated,
+            storageLocation: storageLocation,
+            endpoint: endpoint,
+            physicalMemoryBytes: physicalMemoryBytes
+        )
+    }
+
+    /// Application Support, inside the container when sandboxed, beside the speech models but in a folder of its own.
+    static func defaultStorageLocation() -> URL {
+        URL.applicationSupportDirectory.appending(path: "Verbatim/LanguageModels", directoryHint: .isDirectory)
+    }
+}
+
+extension HubModelProvider where Model == EmbeddingModel {
+    init(storageLocation: URL, endpoint: String = HubEndpoint.default) {
+        self.init(catalog: EmbeddingModelCatalog.curated, storageLocation: storageLocation, endpoint: endpoint)
+    }
+
+    static func defaultStorageLocation() -> URL {
+        URL.applicationSupportDirectory.appending(path: "Verbatim/EmbeddingModels", directoryHint: .isDirectory)
+    }
 }

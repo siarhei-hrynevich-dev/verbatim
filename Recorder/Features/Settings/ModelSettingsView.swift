@@ -5,6 +5,7 @@ import SwiftUI
 struct ModelSettingsView: View {
     let speech: ModelSettingsViewModel<SpeechModel>
     @Bindable var summaries: SummarySettingsViewModel
+    let search: ModelSettingsViewModel<EmbeddingModel>
     /// The language to transcribe in, which belongs to the preferences rather than to any model.
     @Binding var language: TranscriptionLanguage
 
@@ -16,7 +17,7 @@ struct ModelSettingsView: View {
                 ModelCatalogSection(viewModel: speech, texts: Self.speechTexts)
                 ModelCatalogSection(viewModel: summaries.models, texts: Self.summaryTexts)
                 SummarySettingsSection(viewModel: summaries)
-                semanticSearch
+                ModelCatalogSection(viewModel: search, texts: Self.searchTexts)
                 processing
             }
             .padding(SettingsLayout.contentPadding)
@@ -27,6 +28,7 @@ struct ModelSettingsView: View {
             if controlActiveState != .inactive {
                 await speech.refresh()
                 await summaries.models.refresh()
+                await search.refresh()
             }
         }
     }
@@ -57,31 +59,18 @@ struct ModelSettingsView: View {
         )
     )
 
-    // MARK: - Semantic search
-
-    /// Embedding models aren't supported yet, so nothing here can be turned on or downloaded.
-    private var semanticSearch: some View {
-        SettingsSection(
-            title: "Semantic Search",
-            footnote: String(localized: "Until then, the Library searches recording titles and dates.")
-        ) {
-            SettingsRow(
-                title: "Search by Meaning",
-                detail: String(
-                    localized:
-                        "Not available yet: this version can’t install an embedding model or build a search index."
-                )
-            ) {
-                ModelStatusChip(
-                    title: String(localized: "Coming Later"),
-                    icon: .circle,
-                    iconColor: VerbatimColor.tertiaryText,
-                    style: .outlined
-                )
-                .fixedSize()
-            }
-        }
-    }
+    private static let searchTexts = ModelCatalogTexts(
+        title: "Semantic Search",
+        subtitle: "MLX · runs on this Mac",
+        noModelTitle: String(localized: "No search model installed"),
+        purpose: String(localized: "Download a model to search recordings by meaning."),
+        footnote: String(
+            localized: """
+                After each transcript and summary, recordings are indexed for search by meaning, in any language, \
+                and by words. Words are searchable without a model. Changing the model indexes recordings again.
+                """
+        )
+    )
 
     // MARK: - Processing
 
@@ -123,7 +112,7 @@ struct ModelSettingsView: View {
             pausedWhileRecording
             GroupedDivider(leadingInset: 12)
             SettingsRow(title: "Space Used by AI Models", isCompact: true) {
-                Text(SettingsFormat.size(bytes: speech.storageUsageBytes + summaries.models.storageUsageBytes))
+                Text(SettingsFormat.size(bytes: modelsBytes))
                     .font(.system(size: 12))
                     .monospacedDigit()
                     .foregroundStyle(VerbatimColor.secondaryText)
@@ -131,6 +120,10 @@ struct ModelSettingsView: View {
                     .buttonStyle(.verbatim(.secondary, size: .inline))
             }
         }
+    }
+
+    private var modelsBytes: Int64 {
+        speech.storageUsageBytes + summaries.models.storageUsageBytes + search.storageUsageBytes
     }
 
     private var pausedWhileRecording: some View {
@@ -143,8 +136,8 @@ struct ModelSettingsView: View {
                     .font(.system(size: 13))
                 Text(
                     """
-                    Model downloads, checks, transcription and summaries stop during a recording and continue when \
-                    it ends, so capture stays smooth. This can’t be turned off.
+                    Model downloads, checks, transcription, summaries and indexing stop during a recording and \
+                    continue when it ends, so capture stays smooth. This can’t be turned off.
                     """
                 )
                 .font(.system(size: 11))

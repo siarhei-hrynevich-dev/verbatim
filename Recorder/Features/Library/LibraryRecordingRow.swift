@@ -111,6 +111,9 @@ struct LibraryRecordingRow: View {
             LibraryFormat.size(item.sizeBytes),
             item.status.label
         ]
+        if let step = item.status.stepDescription {
+            parts.append(step)
+        }
         if item.hasTranscript {
             parts.append(String(localized: "Transcript available"))
         }
@@ -145,24 +148,35 @@ private struct RecordingStatusView: View {
             .font(.system(size: 12))
 
             if let progress = item.processingProgress {
-                ProgressBar(fraction: progress)
+                HStack(spacing: 6) {
+                    ProgressBar(fraction: progress)
+                    if let step = item.status.stepFraction {
+                        Text(step)
+                            .font(.system(size: 10, weight: .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(VerbatimColor.secondaryText)
+                    }
+                }
             }
         }
+        .help(item.status.stepDescription ?? "")
     }
 }
 
-/// A thin accent progress bar, 140 pt wide.
+/// A thin accent progress bar, with room beside it for the step number.
 private struct ProgressBar: View {
     let fraction: Double
+
+    private static let width: CGFloat = 120
 
     var body: some View {
         Capsule()
             .fill(VerbatimColor.fill)
-            .frame(width: 140, height: 4)
+            .frame(width: Self.width, height: 4)
             .overlay(alignment: .leading) {
                 Capsule()
                     .fill(VerbatimColor.accent)
-                    .frame(width: 140 * min(max(fraction, 0), 1))
+                    .frame(width: Self.width * min(max(fraction, 0), 1))
             }
             .accessibilityHidden(true)
     }
@@ -266,7 +280,10 @@ extension LibraryItem.Status {
         case .ready: String(localized: "Ready")
         case .pending: String(localized: "Pending")
         case .transcribing(let progress): String(localized: "Transcribing \(Self.percent(progress))%")
+        case .summarizing(let progress): String(localized: "Summarizing \(Self.percent(progress))%")
         case .indexing(let progress): String(localized: "Indexing \(Self.percent(progress))%")
+        case .waiting(.summary): String(localized: "Summary queued")
+        case .waiting: String(localized: "Indexing queued")
         case .recorded: String(localized: "Not Transcribed")
         case .failed: String(localized: "Failed")
         case .missing: String(localized: "File missing")
@@ -276,8 +293,8 @@ extension LibraryItem.Status {
     var icon: VerbatimIcon {
         switch self {
         case .ready: .check
-        case .transcribing, .indexing: .loader
-        case .pending, .recorded: .clock
+        case .transcribing, .summarizing, .indexing: .loader
+        case .pending, .waiting, .recorded: .clock
         case .failed: .alert
         case .missing: .missingFile
         }
@@ -286,16 +303,16 @@ extension LibraryItem.Status {
     var iconColor: Color {
         switch self {
         case .ready: VerbatimColor.green
-        case .transcribing, .indexing: VerbatimColor.accent
-        case .pending, .recorded: VerbatimColor.secondaryText
+        case .transcribing, .summarizing, .indexing: VerbatimColor.accent
+        case .pending, .waiting, .recorded: VerbatimColor.secondaryText
         case .failed, .missing: VerbatimColor.red
         }
     }
 
     var labelColor: Color {
         switch self {
-        case .ready, .pending, .recorded: VerbatimColor.secondaryText
-        case .transcribing, .indexing: VerbatimColor.primaryText
+        case .ready, .pending, .waiting, .recorded: VerbatimColor.secondaryText
+        case .transcribing, .summarizing, .indexing: VerbatimColor.primaryText
         case .failed, .missing: VerbatimColor.red
         }
     }
@@ -306,8 +323,27 @@ extension LibraryItem.Status {
         case .recorded: String(localized: "Transcribe")
         case .failed: String(localized: "Retry")
         case .missing: String(localized: "Locate…")
-        case .ready, .pending, .transcribing, .indexing: nil
+        case .ready, .pending, .transcribing, .summarizing, .indexing, .waiting: nil
         }
+    }
+
+    /// The step as the row shows it next to the progress bar: `2/3`.
+    var stepFraction: String? {
+        step.map { "\($0.number)/\(LibraryItem.ProcessingStep.count)" }
+    }
+
+    /// The step in words, for help and VoiceOver: `Step 2 of 3: summary`.
+    var stepDescription: String? {
+        guard let step else {
+            return nil
+        }
+        let name =
+            switch step {
+            case .transcription: String(localized: "transcript")
+            case .summary: String(localized: "summary")
+            case .indexing: String(localized: "search index")
+            }
+        return String(localized: "Step \(step.number) of \(LibraryItem.ProcessingStep.count): \(name)")
     }
 
     private static func percent(_ fraction: Double) -> Int {

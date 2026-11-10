@@ -164,6 +164,31 @@ struct SummaryCoordinatorTests {
         }
         #expect(try await coordinator.summary(for: id) == nil)
     }
+
+    @Test func aNewTranscriptIsSummarizedOnlyWithAModelReady() async throws {
+        let id = try await transcribedRecording()
+        provider.hasUsableModel = false
+
+        coordinator.enqueueIfModelReady(id)
+        #expect(coordinator.job(for: id) == nil)
+
+        provider.hasUsableModel = true
+        coordinator.enqueueIfModelReady(id)
+        #expect(coordinator.hasActiveJobs)
+        await coordinator.waitUntilSettled()
+        #expect(try await coordinator.summary(for: id) != nil)
+    }
+
+    @Test func storingASummaryTellsWhatFollows() async throws {
+        let id = try await transcribedRecording()
+        var stored: [UUID] = []
+        coordinator.onSummaryStored = { stored.append($0) }
+
+        coordinator.enqueue(id)
+        await coordinator.waitUntilSettled()
+
+        #expect(stored == [id])
+    }
 }
 
 /// Stands in for transcription's observable busy state.

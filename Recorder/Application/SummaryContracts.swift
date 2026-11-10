@@ -52,6 +52,8 @@ struct TextGenerationSession: Sendable {
 /// loads the model; a provider for a server or an API would connect instead, with nothing to install.
 @MainActor
 protocol TextGenerationProvider: AnyObject {
+    /// A model is selected and its files are in place, as far as is known without checking the disk again.
+    var hasUsableModel: Bool { get }
     /// Brings model state in line with the disk, so files removed since launch are noticed before they are needed.
     func prepareForUse() async
     /// Throws `SummaryFailure`, or `CancellationError`. Loading can take a while; nothing is switched or downloaded.

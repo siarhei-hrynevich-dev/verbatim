@@ -43,7 +43,7 @@ struct LanguageModelFileStoreTests {
         ("images/logo.png", false)
     ])
     func onlyWhatLoadingNeedsIsDownloaded(path: String, isNeeded: Bool) {
-        #expect(LanguageModelFileStore.isNeeded(path) == isNeeded)
+        #expect(HubModelFiles.isNeeded(path) == isNeeded)
     }
 
     @Test func aCompleteModelVerifies() throws {
@@ -97,7 +97,7 @@ struct LanguageModelFileStoreTests {
         let destination = root.appending(path: "\(model.id)/model.safetensors")
 
         #expect(
-            LanguageModelFileStore.partialFile(for: destination).lastPathComponent == "model.safetensors.incomplete"
+            HubModelFiles.partialFile(for: destination).lastPathComponent == "model.safetensors.incomplete"
         )
     }
 }

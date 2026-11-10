@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-/// The language model storage folder, which this app owns entirely:
+/// The storage folder of one kind of Hugging Face model, language or embedding, which this app owns entirely:
 ///
 ///     <root>/model-registry.json            what was installed
 ///     <root>/<model id>/…                    a model's files, as its repository has them
@@ -9,12 +9,12 @@ import Foundation
 ///
 /// A model's folder is derived from its validated catalog identifier, and paths from a repository listing must stay
 /// inside it. Nothing outside a model's own folder is ever removed.
-struct LanguageModelFileStore: Sendable {
+struct HubModelFileStore<Model: HubHostedModel>: Sendable {
     let root: URL
 
     // MARK: - Layout
 
-    func folder(of model: LanguageModel) throws -> URL {
+    func folder(of model: Model) throws -> URL {
         guard ModelFileStore.isSafeIdentifier(model.id) else {
             throw ModelManagementError.modelUnavailable
         }
@@ -22,7 +22,7 @@ struct LanguageModelFileStore: Sendable {
     }
 
     /// A listed path is untrusted text: it must name a file inside the model's folder.
-    func file(atRelativePath path: String, of model: LanguageModel) throws -> URL {
+    func file(atRelativePath path: String, of model: Model) throws -> URL {
         let components = path.split(separator: "/", omittingEmptySubsequences: false)
         guard components.count >= 2, components[0] == model.id,
             !components.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." })
@@ -32,23 +32,10 @@ struct LanguageModelFileStore: Sendable {
         return try folder(of: model).appending(path: components.dropFirst().joined(separator: "/"))
     }
 
-    static func partialFile(for file: URL) -> URL {
-        file.deletingLastPathComponent().appending(path: file.lastPathComponent + partialSuffix)
-    }
-
-    /// The repository files a model needs to load offline: configuration, weights, tokenizer and chat template.
-    static func isNeeded(_ repositoryPath: String) -> Bool {
-        let name = (repositoryPath as NSString).lastPathComponent
-        guard !name.hasPrefix(".") else {
-            return false
-        }
-        return neededExtensions.contains((name as NSString).pathExtension)
-    }
-
     // MARK: - Preparing
 
     /// Creates the folder, and keeps downloadable weights out of backups.
-    func prepareStorage(for model: LanguageModel) throws {
+    func prepareStorage(for model: Model) throws {
         do {
             try FileManager.default.createDirectory(at: try folder(of: model), withIntermediateDirectories: true)
             var values = URLResourceValues()
@@ -64,7 +51,7 @@ struct LanguageModelFileStore: Sendable {
 
     /// Checks every expected file, and that a model can be loaded from them. Returns the space the model occupies.
     func verify(
-        _ model: LanguageModel,
+        _ model: Model,
         against artifact: ModelArtifact,
         depth: ModelVerificationDepth
     ) throws -> Int64 {
@@ -80,9 +67,9 @@ struct LanguageModelFileStore: Sendable {
         return Self.contentSize(of: try folder(of: model)).allocatedBytes
     }
 
-    private func verifyLayout(of model: LanguageModel, in artifact: ModelArtifact) throws {
+    private func verifyLayout(of model: Model, in artifact: ModelArtifact) throws {
         let names = Set(artifact.files.map { ($0.path as NSString).lastPathComponent })
-        for required in Self.requiredFiles where !names.contains(required) {
+        for required in HubModelFiles.requiredFiles where !names.contains(required) {
             throw ModelManagementError.verificationFailed(detail: "\(required) is missing from the model")
         }
         guard names.contains(where: { $0.hasSuffix(".safetensors") }) else {
@@ -120,7 +107,7 @@ struct LanguageModelFileStore: Sendable {
             try Task.checkCancellation()
             let chunk: Data
             do {
-                chunk = try handle.read(upToCount: Self.hashChunkBytes) ?? Data()
+                chunk = try handle.read(upToCount: HubModelFiles.hashChunkBytes) ?? Data()
             } catch {
                 throw ModelErrorTranslator.translate(error)
             }
@@ -137,7 +124,7 @@ struct LanguageModelFileStore: Sendable {
 
     // MARK: - Measuring
 
-    func inspect(_ model: LanguageModel) -> ModelDiskInspection {
+    func inspect(_ model: Model) -> ModelDiskInspection {
         guard let folder = try? folder(of: model) else {
             return .empty
         }
@@ -175,7 +162,7 @@ struct LanguageModelFileStore: Sendable {
     // MARK: - Removing
 
     /// Removes the model's folder, complete and partial files alike. An absent folder is not a failure.
-    func removeFiles(of model: LanguageModel) throws {
+    func removeFiles(of model: Model) throws {
         let folder = try folder(of: model)
         guard FileManager.default.fileExists(atPath: folder.path(percentEncoded: false)) else {
             return
@@ -187,18 +174,37 @@ struct LanguageModelFileStore: Sendable {
         }
     }
 
-    func resolve(_ model: LanguageModel) -> ResolvedLanguageModel {
-        ResolvedLanguageModel(
-            id: model.id,
-            folder: root.appending(path: model.id, directoryHint: .isDirectory),
-            disablesThinking: model.disablesThinking
-        )
+    func resolve(_ model: Model) -> Model.Resolved {
+        model.resolved(in: root.appending(path: model.id, directoryHint: .isDirectory))
     }
 
-    // MARK: - Constants
+}
 
+typealias LanguageModelFileStore = HubModelFileStore<LanguageModel>
+
+/// The rules every Hub model folder follows, whatever kind of model it holds.
+enum HubModelFiles {
     static let partialSuffix = ".incomplete"
-    private static let requiredFiles = ["config.json", "tokenizer.json", "tokenizer_config.json"]
+    static let requiredFiles = ["config.json", "tokenizer.json", "tokenizer_config.json"]
+    static let hashChunkBytes = 4 * 1024 * 1024
+    private static let poolingFolder = "1_Pooling"
     private static let neededExtensions: Set<String> = ["json", "safetensors", "jinja", "txt", "model", "tiktoken"]
-    private static let hashChunkBytes = 4 * 1024 * 1024
+
+    static func partialFile(for file: URL) -> URL {
+        file.deletingLastPathComponent().appending(path: file.lastPathComponent + partialSuffix)
+    }
+
+    /// The repository files a model needs to load offline: configuration, weights, tokenizer and chat template, at the
+    /// top of the repository, and the pooling configuration of a sentence-transformers model. Folders of other formats,
+    /// such as ONNX, hold files with the same names and are left out.
+    static func isNeeded(_ repositoryPath: String) -> Bool {
+        let components = repositoryPath.split(separator: "/")
+        guard let name = components.last, !name.hasPrefix(".") else {
+            return false
+        }
+        guard components.count == 1 || (components.count == 2 && components[0] == poolingFolder) else {
+            return false
+        }
+        return neededExtensions.contains((String(name) as NSString).pathExtension)
+    }
 }

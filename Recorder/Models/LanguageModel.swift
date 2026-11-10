@@ -2,7 +2,7 @@ import Foundation
 
 /// A language model that runs on this Mac and writes summaries of transcripts. Its files come from a Hugging Face
 /// repository at a fixed commit, so a change in the repository can neither change nor break an installed model.
-struct LanguageModel: InstallableModel {
+struct LanguageModel: HubHostedModel {
     typealias Resolved = ResolvedLanguageModel
 
     /// The app's own name for the model, used as its folder name.
@@ -29,6 +29,10 @@ struct LanguageModel: InstallableModel {
 
     static func recommended(from catalog: [LanguageModel], supportedIDs: Set<ID>) -> LanguageModel? {
         LanguageModelCatalog.recommended(from: catalog, supportedIDs: supportedIDs)
+    }
+
+    func resolved(in folder: URL) -> ResolvedLanguageModel {
+        ResolvedLanguageModel(id: id, folder: folder, disablesThinking: disablesThinking)
     }
 }
 

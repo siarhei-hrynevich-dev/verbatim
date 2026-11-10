@@ -1,31 +1,24 @@
 import Foundation
 import Synchronization
 
-/// Pretends to download and verify language models, for reviewing the Settings design. Sizes are the repositories'
-/// real ones, rounded. Nothing touches the network or the disk.
-struct SimulatedLanguageModelProvider: ModelFileProviding {
-    static let sampleInstalledID = "qwen3-4b-instruct-2507-4bit"
-    static let sampleSizes: [LanguageModel.ID: Int64] = [
-        "qwen3-1.7b-4bit": 980_000_000,
-        "qwen3-4b-instruct-2507-4bit": 2_280_000_000,
-        "qwen3-30b-a3b-instruct-2507-4bit": 17_200_000_000
-    ]
-
-    let installedIDs: [LanguageModel.ID]
+/// Pretends to download and verify Hub models, language or embedding, for reviewing the Settings design. Sizes are the
+/// repositories' real ones, rounded. Nothing touches the network or the disk.
+struct SimulatedHubModelProvider<Model: HubHostedModel>: ModelFileProviding {
+    let catalog: [Model]
+    let sizes: [Model.ID: Int64]
+    let installedIDs: [Model.ID]
     let storageLocation = URL(filePath: "/tmp/verbatim-settings-preview", directoryHint: .isDirectory)
 
-    func supportedModelIDs() -> Set<LanguageModel.ID> {
-        Set(LanguageModelCatalog.curated.map(\.id))
+    func supportedModelIDs() -> Set<Model.ID> {
+        Set(catalog.map(\.id))
     }
 
-    func fetchSupportedModelIDs() async -> Set<LanguageModel.ID> {
+    func fetchSupportedModelIDs() async -> Set<Model.ID> {
         supportedModelIDs()
     }
 
-    func fetchArtifact(of model: LanguageModel) async throws -> ModelArtifact {
-        ModelArtifact(
-            files: [ModelArtifact.File(path: model.id, sizeBytes: Self.sampleSizes[model.id] ?? 0, sha256: nil)]
-        )
+    func fetchArtifact(of model: Model) async throws -> ModelArtifact {
+        ModelArtifact(files: [ModelArtifact.File(path: model.id, sizeBytes: sizes[model.id] ?? 0, sha256: nil)])
     }
 
     func availableCapacity() async throws -> Int64 {
@@ -33,7 +26,7 @@ struct SimulatedLanguageModelProvider: ModelFileProviding {
     }
 
     func download(
-        _ model: LanguageModel,
+        _ model: Model,
         artifact: ModelArtifact,
         onProgress: @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws {
@@ -49,28 +42,39 @@ struct SimulatedLanguageModelProvider: ModelFileProviding {
         }
     }
 
-    func verify(
-        _ model: LanguageModel,
-        against artifact: ModelArtifact,
-        depth: ModelVerificationDepth
-    ) async throws -> Int64 {
+    func verify(_ model: Model, against artifact: ModelArtifact, depth: ModelVerificationDepth) async throws -> Int64 {
         artifact.totalBytes
     }
 
-    func inspect(_ model: LanguageModel) async -> ModelDiskInspection {
+    func inspect(_ model: Model) async -> ModelDiskInspection {
         let isInstalled = installedIDs.contains(model.id)
-        return ModelDiskInspection(hasFiles: isInstalled, bytes: isInstalled ? Self.sampleSizes[model.id] ?? 0 : 0)
+        return ModelDiskInspection(hasFiles: isInstalled, bytes: isInstalled ? sizes[model.id] ?? 0 : 0)
     }
 
-    func removeFiles(of model: LanguageModel, includingSharedFiles: Bool) async throws {}
+    func removeFiles(of model: Model, includingSharedFiles: Bool) async throws {}
 
-    func resolve(_ model: LanguageModel) -> ResolvedLanguageModel {
-        ResolvedLanguageModel(id: model.id, folder: storageLocation, disablesThinking: model.disablesThinking)
+    func resolve(_ model: Model) -> Model.Resolved {
+        model.resolved(in: storageLocation)
     }
 
     func diskUsage() async -> Int64 {
-        installedIDs.reduce(0) { $0 + (Self.sampleSizes[$1] ?? 0) }
+        installedIDs.reduce(0) { $0 + (sizes[$1] ?? 0) }
     }
+}
+
+/// Sample figures for the simulated catalogs.
+enum SimulatedHubModels {
+    static let languageInstalledID = "qwen3-4b-instruct-2507-4bit"
+    static let languageSizes: [LanguageModel.ID: Int64] = [
+        "qwen3-1.7b-4bit": 980_000_000,
+        "qwen3-4b-instruct-2507-4bit": 2_280_000_000,
+        "qwen3-30b-a3b-instruct-2507-4bit": 17_200_000_000
+    ]
+    static let embeddingInstalledID = "multilingual-e5-small"
+    static let embeddingSizes: [EmbeddingModel.ID: Int64] = [
+        "multilingual-e5-small": 494_000_000,
+        "multilingual-e5-base": 1_140_000_000
+    ]
 }
 
 /// Summary settings kept in memory for design review, leaving the real ones untouched.

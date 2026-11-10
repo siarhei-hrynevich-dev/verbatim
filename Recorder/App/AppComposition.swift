@@ -12,21 +12,16 @@ enum AppComposition {
         let preferences: AppPreferences
         let modelManager: SpeechModelManager
         let languageModelManager: LanguageModelManager
+        let embeddingModelManager: EmbeddingModelManager
         let processing: ProcessingCoordinator
         let summaries: SummaryCoordinator
+        let indexing: IndexingCoordinator
+        /// Searches recordings by meaning and words, for whatever asks: in time, an MCP server for AI agents.
+        let search: RecordingSearchService
         /// Holds model and transcription work back while recording.
         let recordingPriority: RecordingPriorityPolicy
         /// Renders the Viewer's video. Created here because it is the one view tied to the concrete player.
         let viewerVideoSurface: AnyView
-    }
-
-    /// The models and the work done with them after a recording, created together because each depends on the last.
-    struct PostProcessing {
-        let speechModels: SpeechModelManager
-        let processing: ProcessingCoordinator
-        let languageModels: LanguageModelManager
-        let summaryPreferences: SummaryPreferences
-        let summaries: SummaryCoordinator
     }
 
     /// With a scenario, a window starts on that design state; capture and the library stay untouched unless the user
@@ -64,7 +59,7 @@ enum AppComposition {
         }
         return ViewModels(
             recorder: recorder,
-            library: LibraryViewModel(service: library, processing: processing, previewScenario: libraryScenario),
+            library: makeLibraryViewModel(library: library, post: post, scenario: libraryScenario),
             viewer: ViewerViewModel(
                 library: library,
                 playback: playback,
@@ -76,39 +71,28 @@ enum AppComposition {
             preferences: preferences,
             modelManager: post.speechModels,
             languageModelManager: post.languageModels,
+            embeddingModelManager: post.embeddingModels,
             processing: processing,
             summaries: post.summaries,
-            recordingPriority: RecordingPriorityPolicy(
-                coordinator: coordinator,
-                speechModels: post.speechModels,
-                languageModels: post.languageModels,
-                processing: processing,
-                summaries: post.summaries
-            ),
+            indexing: post.indexing,
+            search: post.search,
+            recordingPriority: makeRecordingPriority(coordinator: coordinator, post: post),
             viewerVideoSurface: AnyView(AVPlayerSurface(service: playback))
         )
     }
 
-    private static func makeProcessing(
-        databaseURL: URL,
+    private static func makeLibraryViewModel(
         library: LibraryService,
-        modelManager: SpeechModelManager,
-        preferences: AppPreferences
-    ) -> ProcessingCoordinator {
-        let store = SQLiteTranscriptRepository(databaseURL: databaseURL)
-        let processing = ProcessingCoordinator(
-            dependencies: ProcessingCoordinator.Dependencies(
-                jobs: store,
-                transcripts: store,
-                transcription: WhisperTranscriptionService(),
-                models: modelManager,
-                library: library,
-                files: FileTranscriptStore(),
-                language: { preferences.settings.transcriptionLanguage }
-            )
+        post: PostProcessing,
+        scenario: LibraryPreviewScenario?
+    ) -> LibraryViewModel {
+        LibraryViewModel(
+            service: library,
+            processing: post.processing,
+            summaries: post.summaries,
+            indexing: post.indexing,
+            previewScenario: scenario
         )
-        library.addRemovalObserver(processing)
-        return processing
     }
 
     private static func makeLibrary(
@@ -173,67 +157,11 @@ enum AppComposition {
                 systemActions: systemActions,
                 modelManager: models.speechModels,
                 languageModelManager: models.languageModels,
+                embeddingModelManager: models.embeddingModels,
                 summaryPreferences: models.summaryPreferences,
                 metadata: AppMetadata(infoDictionary: Bundle.main.infoDictionary ?? [:]),
                 chooseRecordingsFolder: { await recorder.useChosenFolder($0) }
             )
-        )
-    }
-
-    private static func makeModelManager() -> SpeechModelManager {
-        let storage = WhisperModelProvider.defaultStorageLocation()
-        return SpeechModelManager(
-            provider: WhisperModelProvider(storageLocation: storage),
-            registryStore: JSONModelRegistryStore(fileURL: JSONModelRegistryStore.defaultFileURL(in: storage)),
-            settings: UserDefaultsSettingsRepository(defaults: .standard)
-        )
-    }
-
-    private static func makeLanguageModelManager(selection: any ModelSelectionStore) -> LanguageModelManager {
-        let storage = HubLanguageModelProvider.defaultStorageLocation()
-        return LanguageModelManager(
-            catalog: LanguageModelCatalog.curated,
-            provider: HubLanguageModelProvider(storageLocation: storage),
-            registryStore: JSONModelRegistryStore(fileURL: JSONModelRegistryStore.defaultFileURL(in: storage)),
-            selection: selection
-        )
-    }
-
-    private static func makePostProcessing(
-        databaseURL: URL,
-        library: LibraryService,
-        preferences: AppPreferences
-    ) -> PostProcessing {
-        let speechModels = makeModelManager()
-        let processing = makeProcessing(
-            databaseURL: databaseURL,
-            library: library,
-            modelManager: speechModels,
-            preferences: preferences
-        )
-        let settings = UserDefaultsSummarySettingsRepository(defaults: .standard)
-        let summaryPreferences = SummaryPreferences(repository: settings)
-        let languageModels = makeLanguageModelManager(selection: settings)
-        let summaries = SummaryCoordinator(
-            dependencies: SummaryCoordinator.Dependencies(
-                transcripts: SQLiteTranscriptRepository(databaseURL: databaseURL),
-                summaries: SQLiteSummaryRepository(databaseURL: databaseURL),
-                generation: LocalTextGenerationProvider(
-                    models: languageModels,
-                    runtime: MLXTextGenerationRuntime(),
-                    preferences: summaryPreferences
-                ),
-                isTranscriptionBusy: { processing.hasActiveJobs },
-                language: { summaryPreferences.language }
-            )
-        )
-        library.addRemovalObserver(summaries)
-        return PostProcessing(
-            speechModels: speechModels,
-            processing: processing,
-            languageModels: languageModels,
-            summaryPreferences: summaryPreferences,
-            summaries: summaries
         )
     }
 }

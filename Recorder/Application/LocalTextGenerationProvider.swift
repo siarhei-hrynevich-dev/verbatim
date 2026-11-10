@@ -16,6 +16,13 @@ final class LocalTextGenerationProvider: TextGenerationProvider {
         self.preferences = preferences
     }
 
+    var hasUsableModel: Bool {
+        if case .ready = models.selectionStatus {
+            return true
+        }
+        return false
+    }
+
     func prepareForUse() async {
         await models.reconcile()
     }
