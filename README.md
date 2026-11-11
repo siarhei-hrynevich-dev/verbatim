@@ -1,6 +1,6 @@
 # Recorder
 
-A native Swift 6 / SwiftUI macOS screen recorder. The Recorder window records screens, windows and audio with ScreenCaptureKit and AVFoundation, keeping microphone and system audio as separate tracks. The Library window tracks finished recordings in a local SQLite database: history, renaming, title and date search, sorting, Finder actions, removal, deletion to the Trash, and missing-file handling. The Viewer window plays recordings with AVFoundation and AVKit: video and audio-only, with seeking, volume, speed, full screen, Finder actions and recovery from missing or damaged files. The Settings window manages local Whisper models: browse, download, verify, select and remove them. Recordings are transcribed offline with the selected model, automatically when a recording ends or on request, through a durable queue that always gives way to recording; transcripts show in the Viewer in step with playback and are saved beside the media as TXT, SRT and JSON. A local language model, downloaded and selected in Settings like the Whisper models and run with MLX, summarizes each new transcript, or one on request, in batches, keeping the notes on each part. Transcripts and summaries are then indexed for search: chunks with an FTS5 full-text index, and vectors from a local multilingual embedding model, for search by meaning and words that a future local MCP server will offer to AI agents. The app also has a Dock menu, menu bar recording indicator and app icon, and Swift Testing coverage.
+A native Swift 6 / SwiftUI macOS screen recorder. The Recorder window records screens, windows and audio with ScreenCaptureKit and AVFoundation, keeping microphone and system audio as separate tracks. The Library window tracks finished recordings in a local SQLite database: history, renaming, title and date search, sorting, Finder actions, removal, deletion to the Trash, and missing-file handling. The Viewer window plays recordings with AVFoundation and AVKit: video and audio-only, with seeking, volume, speed, full screen, Finder actions and recovery from missing or damaged files. The Settings window manages local Whisper models: browse, download, verify, select and remove them. Recordings are transcribed offline with the selected model, automatically when a recording ends or on request, through a durable queue that always gives way to recording; transcripts show in the Viewer in step with playback and are saved beside the media as TXT, SRT and JSON. A local language model, downloaded and selected in Settings like the Whisper models and run with MLX, summarizes each new transcript, or one on request, in batches, keeping the notes on each part. Transcripts and summaries are then indexed for search: chunks with an FTS5 full-text index, and vectors from a local multilingual embedding model, for search by meaning and words, which a local MCP server offers to AI agents on this Mac when turned on in Settings. The app also has a Dock menu, menu bar recording indicator and app icon, and Swift Testing coverage.
 
 ## Requirements
 
@@ -47,8 +47,8 @@ Apple frameworks are supplied by the macOS SDK: ScreenCaptureKit, AVFoundation, 
 ## Organization
 
 - `Recorder/Features/Recording`: the Recorder window (views, `RecorderViewModel`) and, under `Preview`, the sample data and scenarios for reviewing its design states.
-- `Recorder/Application`: `RecordingCoordinator`, which owns the recording lifecycle, `LibraryService`, which owns the library's use cases, `ModelManager`, which owns the state of one kind of model (speech, language or embedding), `ProcessingCoordinator`, which owns the transcription queue, `SummaryCoordinator` and `TranscriptSummarizer`, which own summaries, `IndexingCoordinator` and `RecordingSearchService`, which own the search index and searching it, `AppPreferences` and `SummaryPreferences`, and the contracts Infrastructure implements, including `PlaybackService`, `ModelFileProviding`, `TranscriptionService`, `TextGenerator`, `TextEmbedder` and `SearchIndexRepository`.
-- `Recorder/Infrastructure`: capture and media output, playback, the SQLite database, recording files and thumbnails, the WhisperKit adapters (`SpeechModels`, `Transcription`), Hugging Face model downloads for language and embedding models (`LanguageModels`), the MLX adapters (`Summarization`, `Embeddings`), the search index (`Persistence`), preferences, permissions, login item.
+- `Recorder/Application`: `RecordingCoordinator`, which owns the recording lifecycle, `RecordingKnowledgeService` and `AgentServerController`, which own what AI agents can read and the MCP server, `LibraryService`, which owns the library's use cases, `ModelManager`, which owns the state of one kind of model (speech, language or embedding), `ProcessingCoordinator`, which owns the transcription queue, `SummaryCoordinator` and `TranscriptSummarizer`, which own summaries, `IndexingCoordinator` and `RecordingSearchService`, which own the search index and searching it, `AppPreferences` and `SummaryPreferences`, and the contracts Infrastructure implements, including `PlaybackService`, `ModelFileProviding`, `TranscriptionService`, `TextGenerator`, `TextEmbedder` and `SearchIndexRepository`.
+- `Recorder/Infrastructure`: capture and media output, playback, the SQLite database, recording files and thumbnails, the WhisperKit adapters (`SpeechModels`, `Transcription`), Hugging Face model downloads for language and embedding models (`LanguageModels`), the MLX adapters (`Summarization`, `Embeddings`), the search index (`Persistence`), the MCP server (`AgentServer`), preferences, permissions, login item.
 - `Recorder/Features/Library`: the Library window (views, `LibraryViewModel`) and, under `Preview`, its sample recordings, simulated search and scenarios.
 - `Recorder/Features/Viewer`: the Viewer window, the app's player (views, `ViewerViewModel`) and, under `Preview`, its sample data and scenarios.
 - `Recorder/Features/Settings`: the Settings window (views, `SettingsViewModel`, `ModelSettingsViewModel`) and, under `Preview`, sample dependencies with simulated downloads, and scenarios.
@@ -99,7 +99,7 @@ Without `TEST_RUNNER_RECORDER_E2E_DOWNLOAD=1` nothing is downloaded and the fold
 
 ## Search index
 
-After each transcript, and after each summary, the recording is indexed for search: its text is split into chunks with a full-text index, and the embedding model selected in Settings › AI Models › Semantic Search adds a vector to each chunk, for search by meaning across languages. Words are indexed without a model; installing one later gives every recording its vectors. Indexing stops while recording and waits for transcription and summaries. Nothing in the app's windows searches the index yet: `RecordingSearchService` is the entry point for the planned local MCP server described in [Architecture](Docs/ARCHITECTURE.md#search-index).
+After each transcript, and after each summary, the recording is indexed for search: its text is split into chunks with a full-text index, and the embedding model selected in Settings › AI Models › Semantic Search adds a vector to each chunk, for search by meaning across languages. Words are indexed without a model; installing one later gives every recording its vectors. Indexing stops while recording and waits for transcription and summaries. Nothing in the app's windows searches the index yet; AI agents do, through the MCP server below.
 
 To run a real embedding model, downloading it first through the app's own downloader (about 490 MB for the default Multilingual E5 Small):
 
@@ -108,6 +108,18 @@ TEST_RUNNER_RECORDER_E2E_EMBEDDING_MODELS=/tmp/embedding-models TEST_RUNNER_RECO
 ```
 
 `TEST_RUNNER_RECORDER_E2E_EMBEDDING_MODEL_ID` picks another catalog model.
+
+## MCP server for AI agents
+
+Turn on **Settings › Agents › Allow AI Agents to Read Recordings** to let agents and chats on this Mac search and read your recordings over the Model Context Protocol. The server listens on `http://127.0.0.1:47823/mcp` only (the port can be changed there) and refuses requests without the access token shown in the same tab. It is read-only: agents can search, list recordings and tags, and read summaries and transcripts, and nothing else. Answers cite `verbatim://recording/<id>?t=<seconds>` links, which open the Viewer at that moment. What an agent reads goes to the model it uses, which may be a cloud service.
+
+For Claude Code, choose **Copy Command** and run it:
+
+```sh
+claude mcp add --transport http verbatim http://127.0.0.1:47823/mcp --header "Authorization: Bearer <token>"
+```
+
+Other agents and editors that support MCP over HTTP take the `mcpServers` entry from **Copy Configuration**. The tools are `search_recordings`, `list_recordings`, `get_recording`, `get_summary`, `get_transcript` and `list_tags`; details are in [Architecture](Docs/ARCHITECTURE.md#mcp-server).
 
 ## Recorder window design states
 
@@ -133,7 +145,7 @@ The app has the design's icon (“04 Dock”). Clicking the Dock icon brings bac
 
 ## Settings window
 
-Open it with ⌘,, the Recorder's gear or the Dock menu. **General** holds Launch at Login, the menu bar icon, the Dock click and what closing the Recorder does. **AI Models** lists Whisper models and summary models to download, select and remove, and the summary settings. **Storage** shows the recordings folder and the space recordings and models use. **About** shows the real version and build. Controls for things that don't exist yet, such as notifications and update checks, are left out rather than shown doing nothing. Details are in [Implementation Status](Docs/IMPLEMENTATION.md).
+Open it with ⌘,, the Recorder's gear or the Dock menu. **General** holds Launch at Login, the menu bar icon, the Dock click and what closing the Recorder does. **AI Models** lists Whisper models and summary models to download, select and remove, and the summary settings. **Agents** turns on the MCP server and shows how to connect agents. **Storage** shows the recordings folder and the space recordings and models use. **About** shows the real version and build. Controls for things that don't exist yet, such as notifications and update checks, are left out rather than shown doing nothing. Details are in [Implementation Status](Docs/IMPLEMENTATION.md).
 
 Models live in `~/Library/Application Support/Verbatim/Models` and `…/Verbatim/LanguageModels` (inside the container when sandboxed). They download only when you ask, keep working offline once installed, and are never loaded into memory by Settings. A running download pauses while you record and continues afterwards. The same tab holds the Transcription Language.
 

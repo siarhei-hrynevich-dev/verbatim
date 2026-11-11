@@ -10,6 +10,7 @@ enum SettingsPreviewScenario: String, CaseIterable, Identifiable, Sendable {
     case models
     case removeModel
     case noModels
+    case agents
     case storage
     case about
     case licenses
@@ -29,6 +30,7 @@ enum SettingsPreviewScenario: String, CaseIterable, Identifiable, Sendable {
         case .models: "AI Models"
         case .removeModel: "Remove Model"
         case .noModels: "No Models Installed"
+        case .agents: "Agents"
         case .storage: "Storage"
         case .about: "About"
         case .licenses: "Licenses"
@@ -39,6 +41,7 @@ enum SettingsPreviewScenario: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .general: .general
         case .models, .removeModel, .noModels: .models
+        case .agents: .agents
         case .storage: .storage
         case .about, .licenses: .about
         }

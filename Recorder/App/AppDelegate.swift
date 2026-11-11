@@ -85,6 +85,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let summaries = viewModels.summaries
         let indexing = viewModels.indexing
         let resumesQueue = !Self.isHostingTests
+        // The server would otherwise open the user's real port, with their library behind it, during tests.
+        if resumesQueue {
+            viewModels.agentServer.start()
+        }
         Task {
             await modelManager.reconcile()
             await languageModelManager.reconcile()

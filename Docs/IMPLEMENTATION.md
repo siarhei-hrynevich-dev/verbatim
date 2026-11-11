@@ -211,7 +211,7 @@ Summaries of transcripts written by a local language model. The design is in [AR
 
 ## Search index (implemented)
 
-Every recording's transcript and summary are indexed for search by meaning and by words. The design, the schema and the planned MCP server are in [ARCHITECTURE.md](ARCHITECTURE.md#search-index).
+Every recording's transcript and summary are indexed for search by meaning and by words. The design and the schema are in [ARCHITECTURE.md](ARCHITECTURE.md#search-index).
 
 | Layer | Component | Responsibility |
 | --- | --- | --- |
@@ -230,7 +230,26 @@ Every recording's transcript and summary are indexed for search by meaning and b
 
 **Recovery.** Jobs live in memory. At launch, and when the model changes, `search_index_state` and missing vectors show what to queue again. A recording that leaves the Library keeps its index until the next launch, or loses it at once when deleted to the Trash, like a transcript.
 
-**Limits.** No window searches the index yet: `RecordingSearchService` is built and tested for the MCP server described in Architecture, which does not exist yet. Index progress is not shown in Settings. Search is exact rather than approximate, which is fast enough for thousands of hours. A real-model check is opt-in (`EmbeddingEndToEndTests`, see the README).
+**Limits.** No window searches the index yet; AI agents do, through the [MCP server](#mcp-server-implemented). Index progress is not shown in Settings. Search is exact rather than approximate, which is fast enough for thousands of hours. A real-model check is opt-in (`EmbeddingEndToEndTests`, see the README).
+
+## MCP server (implemented)
+
+AI agents and chats on this Mac can search and read recordings through a Model Context Protocol server inside the app. The design is in [ARCHITECTURE.md](ARCHITECTURE.md#mcp-server).
+
+| Layer | Component | Responsibility |
+| --- | --- | --- |
+| Presentation | `AgentSettingsView`, `AgentSettingsViewModel` | Settings › Agents: turning it on, status, port, token, what to paste into an agent. |
+| Application | `RecordingKnowledgeService`, `RecordingPipeline`, `AgentServerController`, `AgentContracts` | Read-only use cases for agents, where each recording's steps stand, the server's settings and lifecycle, the hosting and settings contracts. |
+| Domain | `AgentServerSettings`, `AgentServerState`, `AgentServerFailure`, `RecordingLink` | Port range, token format and generation, states, failures, `verbatim://` links. |
+| Infrastructure | `MCPHTTPServer`, `LocalHTTPServer`, `HTTPRequestParser`, `MCPEndpoint`, `MCPToolbox`, `MCPToolOutput`, `JSONValue`, `UserDefaultsAgentServerRepository` | Listening on the loopback interface, HTTP/1.1, the protocol and its checks, the tools and their results, settings in defaults. |
+
+**Turning it on.** Settings › Agents › Allow AI Agents to Read Recordings, off by default. The server then listens on `http://127.0.0.1:47823/mcp` (the port can be changed) at every launch until turned off. Status shows Off, Starting…, Running or why it is not running (port in use, not permitted, other), with Try Again. A port outside 1024–65535 is refused in place.
+
+**Connecting.** The same tab shows the address and the token (hidden until Show), each with a copy button; Copy Command gives `claude mcp add --transport http verbatim <address> --header "Authorization: Bearer <token>"` for Claude Code, and Copy Configuration an `mcpServers` entry with `type: http`, the address and the header for other agents. New Token… replaces the token after confirmation; agents using the old one are refused from the next request.
+
+**Tools.** `search_recordings`, `list_recordings`, `get_recording`, `get_summary`, `get_transcript` and `list_tags`, read-only, as listed in Architecture. Search results, summary parts and transcript excerpts carry `verbatim://recording/<id>?t=<seconds>` links; opening one shows the Viewer at that second, also when it launches the app.
+
+**Limits.** Runs only while the app runs. No MCP resources, prompts or event streams, and nothing can be changed or started through it. Request bodies must state their length; chunked uploads are refused with 501. Verified with Swift tests over a real loopback port; no particular agent's client has been verified, and an agent needs MCP over HTTP with a custom header to connect.
 
 ## Settings window (implemented)
 
@@ -248,6 +267,8 @@ Every recording's transcript and summary are indexed for search by meaning and b
 
 **Semantic Search.** The embedding model catalog, with the same download, select and remove actions as the other catalogs. See [Search index](#search-index-implemented).
 
+**Agents.** The MCP server's switch, status, port, token and connection snippets. See [MCP server](#mcp-server-implemented).
+
 **Left out because nothing backs them yet.** Notify When Processing Finishes, Postpone on Battery Power, Check for Updates and its automatic toggle, moving existing recordings, Preview Cache, Search Index size and Missing Recordings figures. They return as their features do.
 
 ## Windows (design scenarios)
@@ -263,8 +284,8 @@ The Viewer and the Library keep design scenarios on simulated state beside the r
 
 App holds the AppKit integration:
 
-- `AppComposition` creates the recording, library, playback and model services, preferences, the Recorder, Library, Viewer and Settings view models, and the Viewer's video surface.
-- `AppDelegate` holds those, builds the Dock menu and quit confirmation, compares models with the disk at launch (no download or loading), and acts on the Dock click and window close preferences.
+- `AppComposition` creates the recording, library, playback and model services, preferences, the MCP server and its controller, the Recorder, Library, Viewer and Settings view models, and the Viewer's video surface.
+- `AppDelegate` holds those, builds the Dock menu and quit confirmation, compares models with the disk at launch (no download or loading), starts the MCP server when it is turned on (never in tests), opens `verbatim://` links in the Viewer (`AppDelegate+Links`), and acts on the Dock click and window close preferences.
 - `RecordingIndicators` observes recording state and the menu bar preference to show the menu bar item and Dock badge.
 - `WindowNavigator` lets those AppKit menus open SwiftUI windows.
 - The Debug menu lives in `App/DebugCommands.swift`.
@@ -311,7 +332,8 @@ Swift Testing suites in `RecorderTests` cover:
 - Real recognition with a model on this Mac, off unless asked for, as described in the [README](../README.md#transcription) (`WhisperEndToEndTests`).
 - Summary rules: batching, settings ranges and presets, the catalog, out-of-date summaries, cleaning replies (`SummaryDomainTests`); batching and combining with generation replaced (`TranscriptSummarizerTests`); the queue on real databases: storing, failures, recording priority, waiting for transcription, cancelling, removal (`SummaryCoordinatorTests`); the tables (`SQLiteSummaryRepositoryTests`); presets, customizing, resetting, stored settings and the Settings view model (`SummarySettingsTests`); the language model folder on real files (`LanguageModelFileStoreTests`); the generic model lifecycle on the language catalog (`LanguageModelManagerTests`); a real model downloaded and run, off unless asked for (`SummaryEndToEndTests`); queuing a summary after transcription and telling indexing (`SummaryCoordinatorTests`).
 - Search rules: chunking transcripts and summaries, rank fusion, full-text expressions, the vector matrix and its stored form (`SearchIndexDomainTests`); the index on real databases: outdated recordings, full-text search in Russian and English, nearest vectors with date and tag filters, replaced chunks and their vectors, other models' vectors, removed recordings (`SQLiteSearchIndexRepositoryTests`); the indexing queue with a fake embedder: chunking and embedding, waiting for transcription and summaries, catching up once a model is ready, summaries without embedding the transcript again, recording priority, failures, removal; and hybrid search with and without a model and while recording (`IndexingCoordinatorTests`); a real embedding model downloaded and run, off unless asked for (`EmbeddingEndToEndTests`).
+- The MCP server: links, settings, tokens and the HTTP reader (`RecordingLinkTests`, `AgentServerSettingsTests`, `HTTPRequestParserTests`); what agents read on real databases: listing with filters and pages, unknown tags, where each step stands, summaries, transcript windows, cuts and reading around a search result, search by tag (`RecordingKnowledgeServiceTests`); the endpoint: token, host and origin checks, methods, version negotiation, notifications, errors and every tool's results (`MCPEndpointTests`); the controller with a fake host: first launch, on and off, quick changes, new port and token, failures and retry, stored settings, the Settings tab (`AgentServerControllerTests`); the real server on a free loopback port and a port in use (`MCPHTTPServerTests`).
 
 ## Not implemented yet
 
-No MCP server, no search window over the index, and no recovery of interrupted recordings exist yet. Summaries run only on local MLX models; no server or API backend exists. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.
+No search window over the index and no recovery of interrupted recordings exist yet. Summaries run only on local MLX models; no server or API backend exists. Recordings made before the Library existed, and any whose entry could not be stored, are not listed: nothing imports existing files or reads sidecars, so Add Existing Files… is hidden. Everything described in [ARCHITECTURE.md](ARCHITECTURE.md) as planned is intended future behavior.

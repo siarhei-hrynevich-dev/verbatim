@@ -8,7 +8,7 @@ Presentation depends on Application and Domain; Application depends on Domain. I
 
 ## Current state
 
-What exists in the code today (recording, windows, simulated state, App integration, models, tests) is described in [Implementation Status](IMPLEMENTATION.md). This document describes the target architecture; sections marked "planned" are intended future behavior, not current behavior. Recording capture, its lifecycle, media finalization, the recording library's SQLite persistence, media playback, speech, language and embedding model management, offline transcription, summaries and the search index are implemented; the MCP server that offers search to AI agents is not.
+What exists in the code today (recording, windows, simulated state, App integration, models, tests) is described in [Implementation Status](IMPLEMENTATION.md). This document describes the target architecture; sections marked "planned" are intended future behavior, not current behavior. Recording capture, its lifecycle, media finalization, the recording library's SQLite persistence, media playback, speech, language and embedding model management, offline transcription, summaries, the search index and the MCP server that offers it to AI agents are implemented.
 
 ## Feature and service boundaries (planned)
 
@@ -38,7 +38,10 @@ Services will own these responsibilities:
 | TranscriptRepository, ProcessingJobRepository | Application contracts (implemented by `SQLiteTranscriptRepository`): finished transcripts and the durable job queue |
 | TranscriptFileStore | Application contract (implemented by `FileTranscriptStore`): the transcript files beside a recording's media |
 | IndexingCoordinator | Application workflow (implemented): the single owner of indexing jobs: in-memory sequential queue after transcription and summaries, recording priority, catching up when the model changes |
-| RecordingSearchService | Application service (implemented): hybrid search by meaning and words, the entry point for the planned MCP server |
+| RecordingSearchService | Application service (implemented): hybrid search by meaning and words |
+| RecordingKnowledgeService | Application service (implemented): what AI agents can read about recordings: listing, search with tag filters, details, summaries, transcript excerpts, tags. Read-only; the entry point for the MCP server |
+| AgentServerController | Application state (implemented): the single owner of the MCP server's settings (on/off, port, token) and of whether it runs |
+| AgentServerHosting | Application contract (implemented by `MCPHTTPServer`): listening on the loopback interface with a token |
 | TextEmbedder, EmbeddingProvider | Application contracts: the boundary to swap embedding backends. `LocalEmbeddingProvider` leases an installed model, shares one loaded copy and loads it through `LocalEmbeddingRuntime` (implemented by `MLXEmbeddingRuntime`) |
 | SearchIndexRepository | Application contract (implemented by `SQLiteSearchIndexRepository`): chunks, their FTS5 index and their vectors |
 | ProcessingCoordinator | Application workflow (implemented): the single owner of transcription jobs: durable sequential queue, recording priority, cancellation, retries and recovery |
@@ -139,18 +142,30 @@ Chunks do not depend on the embedding model, which is why words are searchable w
 
 **Recovery.** At launch, and whenever the ready model changes, `IndexingCoordinator` queues recordings whose transcript or summary is newer than `search_index_state`, and recordings with chunks lacking a vector in the selected space.
 
-### MCP server (planned)
+### MCP server
 
-A Model Context Protocol server inside the app, on `127.0.0.1` only, using the Streamable HTTP transport, so that AI agents and chats on this Mac can connect to it. It belongs in Infrastructure as an adapter over Application services, started from App when the user turns it on in Settings; it needs the `com.apple.security.network.server` entitlement and should require a token shown in Settings, because any local process can reach a loopback port. Its tools map onto what exists:
+A Model Context Protocol server inside the app, so that AI agents and chats on this Mac can search and read recordings. It runs while the app runs and the user has turned it on in Settings › Agents; it is off by default.
+
+**Layers.** `RecordingKnowledgeService` (Application) holds the use cases and knows nothing of the protocol. `MCPToolbox`, `MCPEndpoint`, `MCPHTTPServer` and `LocalHTTPServer` (Infrastructure, `AgentServer/`) translate between it and MCP. `AgentServerController` (Application, created in App) owns the settings and the lifecycle; `AgentSettingsViewModel` presents them. Changes take effect in order, each waiting for the last, so a quick toggle ends in the state last asked for. A new token on the same port is taken without closing the port.
+
+**Transport.** Streamable HTTP at `http://127.0.0.1:<port>/mcp`, port 47823 by default. Each POST carries one JSON-RPC message (or a batch) and gets one `application/json` response; notifications get 202. The server keeps no sessions and offers no event stream, which the protocol allows, so GET and DELETE get 405. Protocol versions 2025-11-25, 2025-06-18, 2025-03-26 and 2024-11-05 are accepted; `initialize` answers with the client's version when known, else the newest. **Deviation:** no MCP SDK or server package is used: four JSON-RPC methods (`initialize`, `ping`, `tools/list`, `tools/call`) over a small HTTP/1.1 reader on Network.framework need no dependency, where an SDK would also need an HTTP server package. Bodies must state their length (no chunked encoding), up to 4 MiB; at most 32 connections are open.
+
+**Security.** Only `127.0.0.1` is bound. Every request needs `Authorization: Bearer <token>` (32 random bytes, compared in constant time), a `Host` of `127.0.0.1` or `localhost` with the port, and no `Origin` other than those, which stops web pages, including through DNS rebinding. The token is made at first launch, stored in the app's defaults (beside the library it protects), shown and replaced in Settings. The `com.apple.security.network.server` entitlement allows listening in the sandbox. Tests never start the server, because they run inside the app (`isHostingTests`).
+
+**Tools.** All read-only, annotated as such, with results as `structuredContent` and the same JSON as text:
 
 | Tool | Backed by |
 | --- | --- |
-| `search_recordings(query, from?, to?, tags?, kinds?, limit?)` | `RecordingSearchService.search`: hits with recording id, title, date, kind, time span, text, match and similarity |
-| `list_recordings(from?, to?, tags?, text?)` | `LibraryService` queries |
+| `search_recordings(query, from?, to?, tags?, recording_ids?, sources?, limit?)` | `RecordingSearchService.search` with tag names resolved: hits with chunk id, recording id, title, date, source, time span, segment range, text, how matched, similarity and link, plus whether meaning was used |
+| `list_recordings(from?, to?, tags?, title?, type?, sort?, limit?, cursor?)` | The `recordings` repository: title, date, length, type, tags, and transcript, summary and index status from storage and the coordinators' jobs; with `now` |
+| `get_recording(recording_id)` | The same, with what the transcript (language, speakers, size) and summary (language, whether current) are |
 | `get_summary(recording_id)` | `SummaryRepository`: the summary and its timed parts |
-| `get_transcript(recording_id, from?, to?)` | `TranscriptRepository`: segments in a time range, so an agent reads around a hit without loading a whole transcript |
+| `get_transcript(recording_id, around_chunk_id? \| from?/to?, context_seconds?, max_characters?)` | `TranscriptRepository`: segments starting in a window, cut at a character budget with `next_from` |
+| `list_tags()` | Tags with their recording counts |
 
-The agent's own model does the answering: the server only finds and returns text, with recording identifiers and times it can cite. Queries while recording still answer, by words only.
+Dates in arguments are what the Library's date search reads (`2026-11-04`, `2026-11`, `today`) or ISO 8601 date-times; a date covers its whole day, month or year. Results give dates in ISO 8601 with the Mac's offset and times in seconds with an `hh:mm:ss` label. A mistake the agent can correct comes back as a tool error that says how (unknown id, tag or argument, no transcript yet and why). The agent's own model does the answering; the server only finds and returns text. Queries while recording still answer, by words only.
+
+**Links.** Results carry `verbatim://recording/<id>?t=<seconds>` (`RecordingLink`), which agents are told to cite. The app declares the scheme (`Recorder/Info.plist`, merged into the generated one), and `AppDelegate` opens such a link in the Viewer at that second, queuing the Viewer until the first window has appeared when a link launches the app.
 
 ## Storage and models (planned)
 
@@ -168,4 +183,4 @@ Keep SwiftUI App lifecycle and a regular Dock application. Add an AppKit delegat
 
 ## Sandbox and contextual permissions
 
-App Sandbox is enabled. Audio-input, Movies folder, user-selected read/write and app-scoped bookmark entitlements cover the microphone and recording folders; the microphone usage description is present. The outgoing network entitlement exists for downloading speech and language models from the Hugging Face Hub, and only when the user asks. These entitlements do not grant Screen Recording authorization. Screen and system audio capture authorization must be handled through macOS capture APIs. Microphone authorization is separate. Request each permission when the corresponding feature is used, never all at startup. Persist folder access with security-scoped bookmarks, balance access start/stop, and handle stale bookmarks and denied or revoked permissions. Do not disable the sandbox to bypass permissions. A signed app is needed to validate sandbox/TCC behavior; unsigned build verification does not validate permissions.
+App Sandbox is enabled. Audio-input, Movies folder, user-selected read/write and app-scoped bookmark entitlements cover the microphone and recording folders; the microphone usage description is present. The outgoing network entitlement exists for downloading speech and language models from the Hugging Face Hub, and only when the user asks. The incoming network entitlement exists for the MCP server, which listens on the loopback interface only, and only when the user turns it on. These entitlements do not grant Screen Recording authorization. Screen and system audio capture authorization must be handled through macOS capture APIs. Microphone authorization is separate. Request each permission when the corresponding feature is used, never all at startup. Persist folder access with security-scoped bookmarks, balance access start/stop, and handle stale bookmarks and denied or revoked permissions. Do not disable the sandbox to bypass permissions. A signed app is needed to validate sandbox/TCC behavior; unsigned build verification does not validate permissions.

@@ -22,6 +22,10 @@ struct SettingsViewModelTests {
                 languageModelManager: LanguageModelHarness().manager,
                 embeddingModelManager: .empty(),
                 summaryPreferences: SummaryPreferences(repository: InMemorySummarySettingsRepository()),
+                agentServer: AgentServerController(
+                    host: FakeAgentServerHost(),
+                    repository: InMemoryAgentServerSettingsRepository()
+                ),
                 metadata: AppMetadata(version: "0.1.0", build: "7"),
                 chooseRecordingsFolder: chooseFolder
             )

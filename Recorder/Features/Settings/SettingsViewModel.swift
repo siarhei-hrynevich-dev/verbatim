@@ -16,6 +16,7 @@ final class SettingsViewModel {
         let languageModelManager: LanguageModelManager
         let embeddingModelManager: EmbeddingModelManager
         let summaryPreferences: SummaryPreferences
+        let agentServer: AgentServerController
         let metadata: AppMetadata
         /// Goes through the Recorder, which owns the recordings folder and shows it in its footer.
         let chooseRecordingsFolder: @MainActor (URL) async -> Void
@@ -29,6 +30,7 @@ final class SettingsViewModel {
     private(set) var models: ModelSettingsViewModel<SpeechModel>
     private(set) var summaries: SummarySettingsViewModel
     private(set) var search: ModelSettingsViewModel<EmbeddingModel>
+    private(set) var agents: AgentSettingsViewModel
     private(set) var loginItemStatus = LoginItemStatus.disabled
     /// `nil` until first read, or when it could not be read.
     private(set) var recordingsStorage: RecordingsStorage?
@@ -45,6 +47,7 @@ final class SettingsViewModel {
             manager: dependencies.embeddingModelManager,
             systemActions: dependencies.systemActions
         )
+        agents = AgentSettingsViewModel(controller: dependencies.agentServer)
         if let previewScenario {
             apply(previewScenario)
         }
@@ -225,6 +228,7 @@ final class SettingsViewModel {
         models = ModelSettingsViewModel(manager: next.modelManager, systemActions: next.systemActions)
         summaries = Self.makeSummaries(next)
         search = ModelSettingsViewModel(manager: next.embeddingModelManager, systemActions: next.systemActions)
+        agents = AgentSettingsViewModel(controller: next.agentServer)
         recordingsStorage = nil
         refreshLoginItemStatus()
     }

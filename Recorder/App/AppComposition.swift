@@ -16,8 +16,8 @@ enum AppComposition {
         let processing: ProcessingCoordinator
         let summaries: SummaryCoordinator
         let indexing: IndexingCoordinator
-        /// Searches recordings by meaning and words, for whatever asks: in time, an MCP server for AI agents.
-        let search: RecordingSearchService
+        /// The MCP server through which AI agents on this Mac search and read recordings.
+        let agentServer: AgentServerController
         /// Holds model and transcription work back while recording.
         let recordingPriority: RecordingPriorityPolicy
         /// Renders the Viewer's video. Created here because it is the one view tied to the concrete player.
@@ -47,16 +47,18 @@ enum AppComposition {
             scenario: recorderScenario
         )
         let playback = AVPlaybackService()
+        let agentServer = makeAgentServer(databaseURL: databaseURL, post: post)
         let settings = makeSettings(
-            library: library,
-            recorder: recorder,
-            systemActions: systemActions,
-            preferences: preferences,
-            models: post
+            SettingsSources(
+                library: library,
+                recorder: recorder,
+                systemActions: systemActions,
+                preferences: preferences,
+                models: post,
+                agentServer: agentServer,
+                scenario: settingsScenario
+            )
         )
-        if let settingsScenario {
-            settings.apply(settingsScenario)
-        }
         return ViewModels(
             recorder: recorder,
             library: makeLibraryViewModel(library: library, post: post, scenario: libraryScenario),
@@ -75,7 +77,7 @@ enum AppComposition {
             processing: processing,
             summaries: post.summaries,
             indexing: post.indexing,
-            search: post.search,
+            agentServer: agentServer,
             recordingPriority: makeRecordingPriority(coordinator: coordinator, post: post),
             viewerVideoSurface: AnyView(AVPlayerSurface(service: playback))
         )
@@ -105,6 +107,32 @@ enum AppComposition {
             fileStore: LocalRecordingFileStore(systemActions: systemActions),
             thumbnails: VideoThumbnailProvider(cacheFolder: VideoThumbnailProvider.defaultCacheFolder()),
             destinations: store
+        )
+    }
+
+    /// The MCP server reads the Library through its own connections and answers with what the coordinators hold.
+    private static func makeAgentServer(databaseURL: URL, post: PostProcessing) -> AgentServerController {
+        let metadata = AppMetadata(infoDictionary: Bundle.main.infoDictionary ?? [:])
+        let knowledge = RecordingKnowledgeService(
+            dependencies: RecordingKnowledgeService.Dependencies(
+                recordings: SQLiteRecordingRepository(databaseURL: databaseURL),
+                transcripts: SQLiteTranscriptRepository(databaseURL: databaseURL),
+                summaries: SQLiteSummaryRepository(databaseURL: databaseURL),
+                index: post.searchIndex,
+                search: post.search,
+                activity: { [processing = post.processing, summaries = post.summaries, indexing = post.indexing] id in
+                    RecordingActivity(
+                        transcription: processing.job(for: id)?.state,
+                        summary: summaries.job(for: id)?.state,
+                        indexing: indexing.job(for: id)?.state
+                    )
+                }
+            )
+        )
+        let endpoint = MCPEndpoint(toolbox: MCPToolbox(knowledge: knowledge), serverVersion: metadata.version)
+        return AgentServerController(
+            host: MCPHTTPServer(endpoint: endpoint),
+            repository: UserDefaultsAgentServerRepository(defaults: .standard)
         )
     }
 
@@ -142,26 +170,38 @@ enum AppComposition {
         return (coordinator, recorder)
     }
 
-    private static func makeSettings(
-        library: LibraryService,
-        recorder: RecorderViewModel,
-        systemActions: any SystemActions,
-        preferences: AppPreferences,
-        models: PostProcessing
-    ) -> SettingsViewModel {
-        SettingsViewModel(
+    /// What the Settings window works with, all of it shared with other windows.
+    private struct SettingsSources {
+        let library: LibraryService
+        let recorder: RecorderViewModel
+        let systemActions: any SystemActions
+        let preferences: AppPreferences
+        let models: PostProcessing
+        let agentServer: AgentServerController
+        let scenario: SettingsPreviewScenario?
+    }
+
+    private static func makeSettings(_ sources: SettingsSources) -> SettingsViewModel {
+        let models = sources.models
+        let recorder = sources.recorder
+        let settings = SettingsViewModel(
             dependencies: SettingsViewModel.Dependencies(
-                preferences: preferences,
+                preferences: sources.preferences,
                 loginItem: SMAppServiceLoginItem(),
-                recordingsStorage: library,
-                systemActions: systemActions,
+                recordingsStorage: sources.library,
+                systemActions: sources.systemActions,
                 modelManager: models.speechModels,
                 languageModelManager: models.languageModels,
                 embeddingModelManager: models.embeddingModels,
                 summaryPreferences: models.summaryPreferences,
+                agentServer: sources.agentServer,
                 metadata: AppMetadata(infoDictionary: Bundle.main.infoDictionary ?? [:]),
                 chooseRecordingsFolder: { await recorder.useChosenFolder($0) }
             )
         )
+        if let scenario = sources.scenario {
+            settings.apply(scenario)
+        }
+        return settings
     }
 }

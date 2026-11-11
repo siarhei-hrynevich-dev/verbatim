@@ -13,6 +13,8 @@ extension AppComposition {
         let embeddingModels: EmbeddingModelManager
         let indexing: IndexingCoordinator
         let search: RecordingSearchService
+        /// The index search reads, shared so that readers see the same cached vectors.
+        let searchIndex: SQLiteSearchIndexRepository
     }
 
     private static func makeProcessing(
@@ -71,6 +73,7 @@ extension AppComposition {
         let models: EmbeddingModelManager
         let coordinator: IndexingCoordinator
         let search: RecordingSearchService
+        let index: SQLiteSearchIndexRepository
     }
 
     /// Indexing waits for transcription and summaries, and is told about each transcript and summary stored.
@@ -103,7 +106,8 @@ extension AppComposition {
         return Indexing(
             models: embeddingModels,
             coordinator: indexing,
-            search: RecordingSearchService(index: index, embeddings: embeddings)
+            search: RecordingSearchService(index: index, embeddings: embeddings),
+            index: index
         )
     }
 
@@ -150,7 +154,8 @@ extension AppComposition {
             summaries: summaries,
             embeddingModels: indexing.models,
             indexing: indexing.coordinator,
-            search: indexing.search
+            search: indexing.search,
+            searchIndex: indexing.index
         )
     }
 

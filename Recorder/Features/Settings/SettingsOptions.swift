@@ -4,6 +4,7 @@ import Foundation
 enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
     case general
     case models
+    case agents
     case storage
     case about
 

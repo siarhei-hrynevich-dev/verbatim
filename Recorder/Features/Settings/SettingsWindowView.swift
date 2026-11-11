@@ -54,6 +54,8 @@ struct SettingsWindowView: View {
                 search: viewModel.search,
                 language: $viewModel.transcriptionLanguage
             )
+        case .agents:
+            AgentSettingsView(viewModel: viewModel.agents)
         case .storage:
             StorageSettingsView(viewModel: viewModel)
         case .about:
@@ -67,6 +69,7 @@ extension SettingsTab {
         switch self {
         case .general: "General"
         case .models: "AI Models"
+        case .agents: "Agents"
         case .storage: "Storage"
         case .about: "About"
         }
@@ -76,6 +79,7 @@ extension SettingsTab {
         switch self {
         case .general: .gear
         case .models: .sparkles
+        case .agents: .code
         case .storage: .drive
         case .about: .info
         }
@@ -89,6 +93,10 @@ extension SettingsTab {
 #Preview("AI Models · dark") {
     SettingsWindowView(viewModel: .preview(.models))
         .preferredColorScheme(.dark)
+}
+
+#Preview("Agents") {
+    SettingsWindowView(viewModel: .preview(.agents))
 }
 
 #Preview("Storage · indigo") {

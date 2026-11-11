@@ -44,7 +44,14 @@ final class WindowNavigator {
         show(windowID: LibraryWindowView.windowID)
     }
 
+    /// Before the first window has appeared, as when a link launches the app, the Viewer opens once it has.
     func showViewer() {
+        guard openWindow != nil else {
+            if !launchRequests.contains(.viewer) {
+                launchRequests.append(.viewer)
+            }
+            return
+        }
         show(windowID: ViewerWindowView.windowID)
     }
 

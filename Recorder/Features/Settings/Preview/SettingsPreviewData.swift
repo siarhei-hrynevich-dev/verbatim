@@ -40,9 +40,24 @@ extension SettingsViewModel.Dependencies {
             languageModelManager: languageModelManager,
             embeddingModelManager: previewEmbeddingModels(for: scenario),
             summaryPreferences: SummaryPreferences(repository: summarySettings),
+            agentServer: previewAgentServer(for: scenario),
             metadata: AppMetadata(version: "1.2.0", build: "142"),
             chooseRecordingsFolder: { _ in }
         )
+    }
+
+    /// The Agents scenario shows a running server; nothing listens on any port.
+    private static func previewAgentServer(for scenario: SettingsPreviewScenario) -> AgentServerController {
+        let settings = AgentServerSettings(
+            isEnabled: scenario == .agents,
+            token: "sample-token-0123456789abcdefghijklmnopqrstuv"
+        )
+        let controller = AgentServerController(
+            host: PreviewAgentServerHost(),
+            repository: PreviewAgentServerSettingsRepository(settings: settings)
+        )
+        controller.start()
+        return controller
     }
 
     private static func previewEmbeddingModels(for scenario: SettingsPreviewScenario) -> EmbeddingModelManager {
@@ -217,6 +232,31 @@ private struct PreviewRecordingsStorage: RecordingsStorageProviding {
             recordingCount: 48,
             usedBytes: 38_200_000_000
         )
+    }
+}
+
+/// Pretends to listen.
+private struct PreviewAgentServerHost: AgentServerHosting {
+    func start(port: Int, token: String) async throws -> Int {
+        port
+    }
+
+    func stop() async {}
+}
+
+private final class PreviewAgentServerSettingsRepository: AgentServerSettingsRepository {
+    private let settings: Mutex<AgentServerSettings>
+
+    init(settings: AgentServerSettings) {
+        self.settings = Mutex(settings)
+    }
+
+    func loadSettings() -> AgentServerSettings? {
+        settings.withLock { $0 }
+    }
+
+    func saveSettings(_ settings: AgentServerSettings) {
+        self.settings.withLock { $0 = settings }
     }
 }
 
