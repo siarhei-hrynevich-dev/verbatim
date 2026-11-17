@@ -27,7 +27,7 @@ struct WhisperSegmentFilterTests {
 }
 
 struct LanguageVoteTests {
-    private typealias Detection = WhisperTranscriptionService.LanguageDetection
+    private typealias Detection = LanguageDetection
 
     @Test
     func theLanguageMostChunksPickWinsOverOneConfidentOutlier() {
@@ -36,7 +36,7 @@ struct LanguageVoteTests {
             Detection(language: "ru", logProbability: -0.4, seconds: 20),
             Detection(language: "en", logProbability: -0.1, seconds: 20)
         ]
-        #expect(WhisperTranscriptionService.mostLikelyLanguage(of: detections) == "ru")
+        #expect(LanguageChoice.trackLanguage(of: detections) == "ru")
     }
 
     @Test
@@ -46,12 +46,34 @@ struct LanguageVoteTests {
             Detection(language: "en", logProbability: -0.05, seconds: 4),
             Detection(language: "ru", logProbability: -0.5, seconds: 25)
         ]
-        #expect(WhisperTranscriptionService.mostLikelyLanguage(of: detections) == "ru")
+        #expect(LanguageChoice.trackLanguage(of: detections) == "ru")
     }
 
     @Test
     func nothingDetectedDecidesNothing() {
-        #expect(WhisperTranscriptionService.mostLikelyLanguage(of: []) == nil)
+        #expect(LanguageChoice.trackLanguage(of: []) == nil)
+    }
+
+    @Test
+    func aLongConfidentChunkInAnotherLanguageSwitchesToIt() {
+        let english = Detection(language: "en", logProbability: log(0.95), seconds: 20)
+        #expect(LanguageChoice.chunkLanguage(english, trackLanguage: "es") == "en")
+    }
+
+    @Test(
+        arguments: [
+            (Float(log(0.95)), TimeInterval(2)),
+            (Float(log(0.6)), TimeInterval(20))
+        ]
+    )
+    func aShortOrUnsureChunkKeepsTheTrackLanguage(logProbability: Float, seconds: TimeInterval) {
+        let english = Detection(language: "en", logProbability: logProbability, seconds: seconds)
+        #expect(LanguageChoice.chunkLanguage(english, trackLanguage: "ru") == "ru")
+    }
+
+    @Test
+    func aChunkWithoutDetectionKeepsTheTrackLanguage() {
+        #expect(LanguageChoice.chunkLanguage(nil, trackLanguage: "es") == "es")
     }
 }
 

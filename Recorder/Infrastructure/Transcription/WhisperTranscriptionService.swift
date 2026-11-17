@@ -137,8 +137,9 @@ actor WhisperTranscriptionService: TranscriptionService {
         }
     }
 
-    /// Automatic detection decides once per input, from its first few stretches of speech, instead of once per chunk:
-    /// a short or quiet chunk is easily taken for another language, and the whole chunk then decodes in it.
+    /// Automatic detection settles the input's language from its first few stretches of speech, not from one chunk: a
+    /// short or quiet chunk is easily taken for another language. Their detections are kept, since each chunk is
+    /// detected again when it is decoded (see `LanguageChoice`).
     private func settleLanguage(
         _ model: WhisperKit,
         _ session: inout InputSession,
@@ -148,53 +149,65 @@ actor WhisperTranscriptionService: TranscriptionService {
         guard session.isSettlingLanguage else {
             return
         }
-        session.language = try await detectLanguage(in: session.waiting, with: model)
+        var detections: [LanguageDetection?] = []
+        for chunk in session.waiting {
+            detections.append(
+                chunk.isSilent ? nil : try await detectLanguage(of: chunk.droppingLeadingSilence(), model)
+            )
+        }
+        session.trackLanguage = LanguageChoice.trackLanguage(of: detections.compactMap(\.self))
         session.isSettlingLanguage = false
         let waiting = session.waiting
         session.waiting = []
-        for chunk in waiting {
-            try await recognize(chunk, model, &session, &collector, &progress)
+        for (chunk, detection) in zip(waiting, detections) {
+            try await recognize(chunk, model, &session, &collector, &progress, detection: detection)
         }
     }
 
-    /// The language the chunks' speech most likely is. `nil` when nothing could be detected, which leaves each chunk to
-    /// detect its own language as before.
-    private func detectLanguage(in chunks: [SpeechChunk], with model: WhisperKit) async throws -> String? {
-        var detections: [LanguageDetection] = []
-        for chunk in chunks where !chunk.isSilent {
-            try Task.checkCancellation()
-            let audio = chunk.droppingLeadingSilence()
-            do {
-                let detected = try await model.detectLangauge(audioArray: audio.samples)
-                let seconds = TimeInterval(audio.samples.count) / TimeInterval(AudioTimelineAssembler.sampleRate)
-                detections += detected.langProbs.map {
-                    LanguageDetection(language: $0.key, logProbability: $0.value, seconds: seconds)
-                }
-            } catch {
-                Self.logger.error("Language detection failed: \(String(describing: error), privacy: .public)")
+    /// `nil` when detection failed, which is logged: the chunk then keeps the input's language.
+    private func detectLanguage(of audio: SpeechChunk, _ model: WhisperKit) async throws -> LanguageDetection? {
+        try Task.checkCancellation()
+        do {
+            let detected = try await model.detectLangauge(audioArray: audio.samples)
+            guard let logProbability = detected.langProbs[detected.language] else {
                 return nil
             }
+            let seconds = TimeInterval(audio.samples.count) / TimeInterval(AudioTimelineAssembler.sampleRate)
+            return LanguageDetection(language: detected.language, logProbability: logProbability, seconds: seconds)
+        } catch {
+            Self.logger.error("Language detection failed: \(String(describing: error), privacy: .public)")
+            return nil
         }
-        return Self.mostLikelyLanguage(of: detections)
     }
 
-    /// What WhisperKit's detection reports for one chunk: only the language it picked, with that pick's
-    /// log-probability, not a distribution over languages.
-    struct LanguageDetection: Equatable {
-        let language: String
-        let logProbability: Float
-        let seconds: TimeInterval
-    }
-
-    /// Each chunk votes for its language with its probability, weighted by its length. Log-probabilities are never
-    /// added up: they are negative, so a language picked by fewer chunks would score higher. Weighting by length keeps
-    /// a short reply full of English terms in Russian speech from counting as much as a long stretch of speech.
-    static func mostLikelyLanguage(of detections: [LanguageDetection]) -> String? {
-        var votes: [String: Double] = [:]
-        for detection in detections {
-            votes[detection.language, default: 0] += exp(Double(detection.logProbability)) * max(detection.seconds, 0)
+    /// The language to decode a chunk in: the requested one, or with automatic detection the chunk's own when it is
+    /// clearly another than the input's. `nil` leaves the decoder to detect it, when the input's could not be.
+    private func language(
+        of audio: SpeechChunk,
+        _ model: WhisperKit,
+        _ session: InputSession,
+        detection: LanguageDetection?
+    ) async throws -> String? {
+        guard session.isAutomatic, let trackLanguage = session.trackLanguage else {
+            return session.trackLanguage
         }
-        return votes.max { ($0.value, $1.key) < ($1.value, $0.key) }?.key
+        var detection = detection
+        if detection == nil {
+            detection = try await detectLanguage(of: audio, model)
+        }
+        let language = LanguageChoice.chunkLanguage(detection, trackLanguage: trackLanguage)
+        if language != trackLanguage, let detection {
+            let seconds = TimeInterval(audio.startSample) / TimeInterval(AudioTimelineAssembler.sampleRate)
+            let probability = detection.probability
+            Self.logger.info(
+                """
+                Chunk at \(seconds, format: .fixed(precision: 1), privacy: .public) s switches from \
+                \(trackLanguage, privacy: .public) to \(language, privacy: .public), \
+                p = \(probability, format: .fixed(precision: 2), privacy: .public)
+                """
+            )
+        }
+        return language
     }
 
     private func recognize(
@@ -202,7 +215,8 @@ actor WhisperTranscriptionService: TranscriptionService {
         _ model: WhisperKit,
         _ session: inout InputSession,
         _ collector: inout SpeechCollector,
-        _ progress: inout AudioProgress
+        _ progress: inout AudioProgress,
+        detection: LanguageDetection? = nil
     ) async throws {
         defer { progress.advance(session.input, toSample: chunk.startSample + chunk.samples.count) }
         try Task.checkCancellation()
@@ -210,7 +224,9 @@ actor WhisperTranscriptionService: TranscriptionService {
             return
         }
         let audio = chunk.droppingLeadingSilence()
-        let options = Self.decodingOptions(language: session.language)
+        let options = Self.decodingOptions(
+            language: try await language(of: audio, model, session, detection: detection)
+        )
         let stopFlag = OSAllocatedUnfairLock(initialState: false)
         let results: [TranscriptionResult]
         do {
@@ -235,7 +251,7 @@ actor WhisperTranscriptionService: TranscriptionService {
         }
     }
 
-    /// Detection happens before decoding, once per input, so decoding itself is told the language. With none known,
+    /// Detection happens before decoding, so decoding itself is told the language. With none known,
     /// detection is requested explicitly: WhisperKit's default options would decode as English. Special tokens are
     /// left out of the text. Word timestamps cost a little time, but align each segment to its words: without them a
     /// segment can start seconds before anyone speaks, which is where selecting that line would seek to.
@@ -341,8 +357,11 @@ private struct SpeechCollector {
 /// What carries from one chunk of an input to the next.
 private struct InputSession {
     let input: RecordingAudioInput
-    /// `nil` while automatic detection has not decided, or could not.
-    var language: String?
+    /// No language was requested, so it is detected.
+    let isAutomatic: Bool
+    /// The requested language, or the one detected for the input. `nil` while automatic detection has not decided, or
+    /// could not.
+    var trackLanguage: String?
     var isSettlingLanguage: Bool
     /// Chunks held back until the language is settled.
     var waiting: [SpeechChunk] = []
@@ -353,37 +372,8 @@ private struct InputSession {
 
     init(input: RecordingAudioInput, requestedLanguage: String?) {
         self.input = input
-        language = requestedLanguage
+        isAutomatic = requestedLanguage == nil
+        trackLanguage = requestedLanguage
         isSettlingLanguage = requestedLanguage == nil
-    }
-}
-
-/// Measures progress as audio finished out of all audio to transcribe, across sources. Whisper's windows make it step
-/// roughly every 30 seconds of audio.
-private struct AudioProgress {
-    private let totalSeconds: TimeInterval
-    private let onUpdate: @Sendable (TranscriptionUpdate) -> Void
-    private var finishedSeconds: TimeInterval = 0
-
-    init(layout: RecordingAudioLayout, onUpdate: @escaping @Sendable (TranscriptionUpdate) -> Void) {
-        totalSeconds = layout.inputs.reduce(0) { $0 + max($1.durationSeconds, 0) }
-        self.onUpdate = onUpdate
-    }
-
-    func advance(_ input: RecordingAudioInput, toSample sample: Int) {
-        let seconds = TimeInterval(sample) / TimeInterval(AudioTimelineAssembler.sampleRate)
-        report(finishedSeconds + min(seconds, input.durationSeconds))
-    }
-
-    mutating func finish(_ input: RecordingAudioInput) {
-        finishedSeconds += max(input.durationSeconds, 0)
-        report(finishedSeconds)
-    }
-
-    private func report(_ seconds: TimeInterval) {
-        guard totalSeconds > 0 else {
-            return
-        }
-        onUpdate(.processingAudio(fraction: min(seconds / totalSeconds, 1)))
     }
 }
