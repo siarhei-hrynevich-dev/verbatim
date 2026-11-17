@@ -47,6 +47,19 @@ make check
 
 The checked-in `.xcodeproj` and shared Verbatim scheme need no project generator. Build and test use `xcodebuild`, Debug, arm64, and signing disabled; products go into ignored `DerivedData/`. In Xcode select the Verbatim scheme and My Mac, then Run.
 
+## Continuous integration
+
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every pull request, on pushes to `main`, and on demand. It uses GitHub's arm64 `macos-26` runner with Xcode 26.3 selected explicitly (Swift 6.2, the toolchain the sources are formatted and built with), and runs the same targets as `make check`: `make setup`, then `make format-check`, `make lint`, `make build` and `make test`. Swift package checkouts are cached by the hash of `Package.resolved`. When a step fails, the build and test logs and the `.xcresult` bundle from `DerivedData/Logs` are uploaded as a workflow artifact.
+
+To reproduce a CI run locally, select Xcode 26.3 and run:
+
+```sh
+make setup
+make check
+```
+
+When moving to a newer Xcode, update `XCODE_VERSION` in the workflow in the same change, and run `make format` with that Xcode's swift-format.
+
 ## Signing
 
 Use automatic signing with your own development team when signed development is needed, and do not commit it. Distribution signing is not configured: release builds are not signed with a Developer ID and not notarized. The unsigned builds from `make build` do not exercise the sandbox, so test permissions with a build signed with your own development team.

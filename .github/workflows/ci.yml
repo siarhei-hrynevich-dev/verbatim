@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned to the Xcode the project is developed with: Swift 6.2 and its swift-format. Later Xcode 26 releases ship
+  # Swift 6.3, whose compiler and formatter may disagree with the checked-in sources.
+  XCODE_VERSION: "26.3"
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+  HOMEBREW_NO_ANALYTICS: "1"
+
+jobs:
+  check:
+    name: Format, lint, build and test
+    # macos-26 is the arm64 image with every release of Xcode 26 and its Metal Toolchain preinstalled.
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: |
+          xcode="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [[ ! -d "$xcode" ]]; then
+            echo "::error::$xcode is not installed on this runner image. Installed versions:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select --switch "$xcode"
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcrun swift --version
+          xcrun --find swift-format
+
+      - name: Restore Swift packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: DerivedData/SourcePackages
+          key: spm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Verbatim.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ runner.arch }}-
+
+      # Installs SwiftLint (swift-format comes with Xcode), the Metal Toolchain if the image lacks it, and resolves
+      # packages, exactly as contributors do locally.
+      - name: Set up
+        run: make setup
+
+      - name: Check formatting
+        run: make format-check
+
+      - name: Lint
+        run: make lint
+
+      - name: Build
+        run: |
+          mkdir -p ci-logs
+          make build 2>&1 | tee ci-logs/build.log
+
+      - name: Test
+        run: |
+          mkdir -p ci-logs
+          make test 2>&1 | tee ci-logs/test.log
+
+      - name: Upload logs and test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ci-logs/
+            DerivedData/Logs/Build/
+            DerivedData/Logs/Test/
+          if-no-files-found: ignore
+          retention-days: 14

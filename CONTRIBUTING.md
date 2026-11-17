@@ -19,6 +19,10 @@ make check   # format-check, lint, Xcode build and tests
 
 `make check` must pass before you open a pull request. Use `make format` to fix formatting and `make lint` to see lint findings; the [Development guide](Docs/DEVELOPMENT.md#make-targets) lists every target. Builds and tests run with `xcodebuild` and signing disabled; to run the app signed, select your own development team in Xcode locally and do not commit it.
 
+## Continuous integration
+
+Every pull request runs the CI workflow on an Apple Silicon macOS runner with Xcode 26.3: `make setup`, then `make format-check`, `make lint`, `make build` and `make test`, the same as `make check`. If it fails, the logs and test results are attached to the run as an artifact; reproduce it locally with `make setup` and `make check`. See [Continuous integration](Docs/DEVELOPMENT.md#continuous-integration) for details.
+
 ## Read before writing code
 
 [AGENTS.md](AGENTS.md) is the canonical rule set for this repository, for people and coding agents alike. Before changing code, read it and the documents it lists:
