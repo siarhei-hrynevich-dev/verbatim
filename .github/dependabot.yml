@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+
+  # Dependabot reads Xcode-managed SwiftPM dependencies from
+  # Verbatim.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+  # and updates the exact versions pinned in project.pbxproj; no Package.swift is needed.
+  - package-ecosystem: "swift"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+    groups:
+      # mlx-swift-lm requires mlx-swift within the same minor version, so they move together.
+      mlx:
+        patterns:
+          - "*ml-explore/mlx-swift*"
