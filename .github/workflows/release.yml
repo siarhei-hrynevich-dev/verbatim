@@ -1,0 +1,194 @@
+name: Release
+
+# On every push to main, release-please keeps a release pull request up to date from the Conventional Commits since
+# the last release. Merging that pull request makes release-please tag vX.Y.Z and publish the GitHub Release; the
+# build job in this same run then builds, signs ad hoc, packages and uploads the assets. A tag created with
+# GITHUB_TOKEN does not start other workflows, which is why the build lives here and not in an `on: push: tags` one.
+#
+# Run the workflow by hand with a tag to rebuild and replace the assets of an existing release, or to publish the
+# first release (see "Releasing" in Docs/DEVELOPMENT.md).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build, such as v0.1.0
+        required: true
+        type: string
+
+# Never cancel a release in progress; runs for the same ref wait for each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  # Keep in step with ci.yml.
+  XCODE_VERSION: "26.3"
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+  HOMEBREW_NO_ANALYTICS: "1"
+
+jobs:
+  release-please:
+    name: Release pull request and tag
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write # release-please creates its "autorelease" labels on first use.
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build:
+    name: Build and upload release assets
+    needs: release-please
+    # On push, only when release-please has just published a release; always when run by hand.
+    if: >-
+      !cancelled() && (
+        github.event_name == 'workflow_dispatch' ||
+        needs.release-please.outputs.release_created == 'true'
+      )
+    # macos-26 is the arm64 image with every release of Xcode 26 and its Metal Toolchain preinstalled.
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: write # create the first release and upload assets
+      id-token: write # sign build provenance attestations
+      attestations: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || needs.release-please.outputs.tag_name }}
+    steps:
+      - name: Resolve the release
+        id: resolve
+        run: |
+          if [[ ! $TAG =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::'$TAG' is not a release tag like v1.2.3."
+            exit 1
+          fi
+          version=${BASH_REMATCH[1]}
+          if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+            ref="refs/tags/$TAG"
+            exists=true
+          elif [[ $GITHUB_EVENT_NAME == workflow_dispatch && $GITHUB_REF == refs/heads/main ]]; then
+            # The first release: no release exists yet, so build main and publish it from this run.
+            ref=$GITHUB_SHA
+            exists=false
+          else
+            echo "::error::There is no release $TAG. Only a run by hand on main can publish a release that does not exist yet."
+            exit 1
+          fi
+          {
+            echo "version=$version"
+            echo "ref=$ref"
+            echo "exists=$exists"
+          } >>"$GITHUB_OUTPUT"
+          echo "Building $TAG ($version) from $ref; release exists: $exists"
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.resolve.outputs.ref }}
+          persist-credentials: false
+
+      - name: Prepare the notes for a new release
+        if: steps.resolve.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          manifest_version=$(sed -n 's/^ *"\.": *"\([^"]*\)".*/\1/p' .release-please-manifest.json)
+          if [[ $manifest_version != "$VERSION" ]]; then
+            echo "::error::.release-please-manifest.json has $manifest_version; only that version can be published by hand."
+            exit 1
+          fi
+          # The section of CHANGELOG.md for this version, without its heading.
+          awk -v version="$VERSION" '
+            index($0, "## [" version "]") == 1 { found = 1; next }
+            found && /^## / { exit }
+            found && /^\[[^]]+\]: / { exit }
+            found { print }
+          ' CHANGELOG.md >"$RUNNER_TEMP/release-notes.md"
+          if [[ ! -s $RUNNER_TEMP/release-notes.md ]]; then
+            echo "::error::CHANGELOG.md has no section for $VERSION."
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/release-notes.md"
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: |
+          xcode="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [[ ! -d "$xcode" ]]; then
+            echo "::error::$xcode is not installed on this runner image. Installed versions:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select --switch "$xcode"
+          xcodebuild -version
+
+      - name: Restore Swift packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: DerivedData/SourcePackages
+          key: spm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Verbatim.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Set up
+        run: make setup
+
+      - name: Build and package
+        env:
+          RELEASE_VERSION: ${{ steps.resolve.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          mkdir -p ci-logs
+          make package RELEASE_VERSION="$RELEASE_VERSION" BUILD_NUMBER="$BUILD_NUMBER" 2>&1 | tee ci-logs/package.log
+
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            build/release/Verbatim-${{ steps.resolve.outputs.version }}-macos-arm64.zip
+            build/release/Verbatim-${{ steps.resolve.outputs.version }}-macos-arm64.dmg
+
+      - name: Publish the first release
+        if: steps.resolve.outputs.exists == 'false'
+        run: |
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+
+      - name: Upload release assets
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          gh release upload "$TAG" --clobber \
+            "build/release/Verbatim-$VERSION-macos-arm64.zip" \
+            "build/release/Verbatim-$VERSION-macos-arm64.dmg" \
+            build/release/SHA256SUMS.txt
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ci-logs/
+            DerivedData/Logs/Build/
+          if-no-files-found: ignore
+          retention-days: 14

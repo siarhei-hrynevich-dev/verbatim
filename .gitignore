@@ -28,7 +28,9 @@ DownloadedModels/
 *.sqlite-wal
 *.sqlite3-shm
 *.sqlite3-wal
-# Release and signing artifacts (zipped builds land in the ignored build/ and DerivedData/ folders).
+# Release and signing artifacts. `make package` writes the archive, zip, DMG and SHA256SUMS.txt to the ignored
+# build/release/ folder; CI keeps its logs in ci-logs/.
+ci-logs/
 *.dmg
 *.p12
 *.cer

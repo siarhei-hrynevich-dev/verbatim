@@ -48,15 +48,16 @@ Screenshots are coming. The expected images are listed in [Docs/Images](Docs/Ima
 
 ## Install
 
-1. Download the latest `Verbatim` zip or DMG from [GitHub Releases](https://github.com/siarhei-hrynevich/verbatim/releases/latest). Download Verbatim only from this repository's Releases page.
-2. Verify the download against the SHA-256 checksum published with the release:
+1. From the [latest release](https://github.com/siarhei-hrynevich/verbatim/releases/latest), download `Verbatim-<version>-macos-arm64.dmg` (or the `.zip`) and `SHA256SUMS.txt`. Download Verbatim only from this repository's Releases page. Builds are for Apple Silicon only.
+2. Verify the download against the checksums published with the release:
 
    ```sh
-   shasum -a 256 ~/Downloads/<downloaded file>
+   cd ~/Downloads
+   shasum -a 256 -c SHA256SUMS.txt --ignore-missing
    ```
 
-   The printed hash must match the one on the release page exactly.
-3. Open the zip or DMG and move **Verbatim** to your Applications folder.
+   It must print `OK` for the file you downloaded. Optionally, check that GitHub Actions built it from this repository with the [GitHub CLI](https://cli.github.com): `gh attestation verify Verbatim-<version>-macos-arm64.dmg --repo siarhei-hrynevich/verbatim`.
+3. Open the DMG, or the `Verbatim` folder from the zip, and move **Verbatim** to your Applications folder. `LICENSE` and `THIRD_PARTY_NOTICES.md` beside it are the licenses of Verbatim and the open-source software it includes.
 
 ### First launch
 

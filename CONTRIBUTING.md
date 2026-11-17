@@ -52,14 +52,16 @@ docs: update documentation, split implementation and architecture files
 chore: rename app to Verbatim and clean up repository for open source
 ```
 
-Use `feat` for new behavior, `fix` for bug fixes, `docs` for documentation only, `test` for tests only, `refactor` for changes that keep behavior, and `chore` for tooling, dependencies and housekeeping.
+Use `feat` for new behavior, `fix` for bug fixes, `docs` for documentation only, `test` for tests only, `refactor` for changes that keep behavior, `ci` for workflows, and `chore` for tooling, dependencies and housekeeping.
+
+Commit types drive releases. [release-please](https://github.com/googleapis/release-please) reads the commits on `main` to choose the next version and write the CHANGELOG.md entry: `feat` and `fix` (and `perf`, `revert`, `deps`) appear in the changelog and make a release, while `docs`, `test`, `refactor`, `ci` and `chore` do not. Mark a breaking change with `!` after the type (`feat!: ...`) or a `BREAKING CHANGE:` footer. When a pull request is squash-merged, its title becomes the commit summary, so write it in the same form. See [Releasing](Docs/DEVELOPMENT.md#releasing).
 
 ## Pull requests
 
 - Keep each pull request focused on one change, and describe what changed and why. Link the issue it addresses.
 - Make sure `make check` passes.
 - Add or update tests for the behavior you change.
-- Update the documentation listed above, [CHANGELOG.md](CHANGELOG.md) under Unreleased for user-visible changes, and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) with the in-app license list (`ThirdPartyLicense.shipped`) when you add, remove or update a package.
+- Update the documentation listed above and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) with the in-app license list (`ThirdPartyLicense.shipped`) when you add, remove or update a package.
 - Manage dependencies through Xcode's Swift Package Manager references, link only the products you need, and commit `Package.resolved`. Prefer no new dependency when a small amount of code will do.
 - For UI changes, include a screenshot or short recording that contains no personal data.
 

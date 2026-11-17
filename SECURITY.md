@@ -45,10 +45,17 @@ Verbatim records the screen and audio and keeps everything on the Mac. The point
 ### Release builds
 
 - Release builds are **not signed with an Apple Developer ID and not notarized**. macOS Gatekeeper will warn when opening them.
-- Download releases only from this repository's GitHub Releases page, and verify the SHA-256 checksum published with each release before opening the app:
+- Release builds are built by GitHub Actions from the release tag ([`.github/workflows/release.yml`](.github/workflows/release.yml)) and signed ad hoc, so App Sandbox and Hardened Runtime apply with the entitlements above.
+- Download releases only from this repository's GitHub Releases page, and verify the download against the `SHA256SUMS.txt` published with each release before opening the app:
 
   ```sh
-  shasum -a 256 <downloaded file>
+  shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+  ```
+
+- Each zip and DMG has a signed build provenance attestation that ties it to the workflow run and commit that built it. Verify it with the GitHub CLI:
+
+  ```sh
+  gh attestation verify Verbatim-<version>-macos-arm64.dmg --repo siarhei-hrynevich/verbatim
   ```
 
 ### Out of scope

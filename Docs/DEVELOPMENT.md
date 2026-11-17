@@ -33,6 +33,7 @@ make format
 make lint
 make format-check
 make check
+make package
 ```
 
 | Target | What it does |
@@ -44,6 +45,7 @@ make check
 | `make format-check` | Checks formatting without changing files. |
 | `make lint` | Strict SwiftLint source linting. |
 | `make check` | `format-check`, `lint`, `build` and `test`, in that order. |
+| `make package` | Release archive for arm64, signed ad hoc, packaged as a zip and a DMG with `SHA256SUMS.txt` in `build/release/`. See [Releasing](#releasing). |
 
 The checked-in `.xcodeproj` and shared Verbatim scheme need no project generator. Build and test use `xcodebuild`, Debug, arm64, and signing disabled; products go into ignored `DerivedData/`. In Xcode select the Verbatim scheme and My Mac, then Run.
 
@@ -56,13 +58,63 @@ To reproduce a CI run locally, select Xcode 26.3 and run:
 ```sh
 make setup
 make check
+make package
 ```
 
-When moving to a newer Xcode, update `XCODE_VERSION` in the workflow in the same change, and run `make format` with that Xcode's swift-format.
+When moving to a newer Xcode, update `XCODE_VERSION` in both workflows, [`ci.yml`](../.github/workflows/ci.yml) and [`release.yml`](../.github/workflows/release.yml), in the same change, and run `make format` with that Xcode's swift-format.
+
+## Releasing
+
+Releases are automated with [release-please](https://github.com/googleapis/release-please) and [`.github/workflows/release.yml`](../.github/workflows/release.yml). Commit types decide the next version: while the version is below 1.0, `feat` and breaking changes (`feat!:` or a `BREAKING CHANGE:` footer) bump the minor version and `fix`, `perf`, `revert` and `deps` the patch version; `docs`, `chore`, `ci`, `test`, `refactor`, `build` and `style` commits alone do not make a release.
+
+```text
+push to main ──> release-please job ──> opens or updates the release PR (version X.Y.Z)
+                                         (bumps .release-please-manifest.json, adds the CHANGELOG.md entry)
+merge release PR ──> release-please job ──> tag vX.Y.Z + GitHub Release (notes = CHANGELOG entry)
+                 └─> build job (same run, macos-26, Xcode 26.3)
+                       make setup ──> make package RELEASE_VERSION=X.Y.Z BUILD_NUMBER=<run number>
+                       ──> build provenance attestation ──> gh release upload --clobber
+```
+
+The build job runs in the same workflow run because a tag or release created with `GITHUB_TOKEN` does not start other workflows. Each release gets three assets:
+
+- `Verbatim-X.Y.Z-macos-arm64.zip`: a `Verbatim` folder with `Verbatim.app`, `LICENSE` and `THIRD_PARTY_NOTICES.md`.
+- `Verbatim-X.Y.Z-macos-arm64.dmg`: a `Verbatim X.Y.Z` volume with the same three items and an `Applications` link.
+- `SHA256SUMS.txt`: SHA-256 checksums of the zip and the DMG, checkable with `shasum -a 256 -c SHA256SUMS.txt`.
+
+The zip and the DMG also get a signed [build provenance attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations), which anyone can check with `gh attestation verify <file> --repo siarhei-hrynevich/verbatim`.
+
+**Versions.** The release tag is the source of truth. `make package` passes it to `xcodebuild` as `MARKETING_VERSION` (`CFBundleShortVersionString`), and the workflow run number as `CURRENT_PROJECT_VERSION` (`CFBundleVersion`). The `MARKETING_VERSION` in `project.pbxproj` is not bumped and is only what development builds show: release-please could edit it only through `x-release-please-version` comments, which Xcode drops whenever it rewrites the project file, so the release PR would silently stop updating it. release-please keeps the version in `.release-please-manifest.json` instead, which `make package` uses by default.
+
+**CHANGELOG.md** is written by release-please in the release PR, from the commit summaries. Write commit summaries for users, and do not add an Unreleased section; release-please inserts each version above the newest heading. To reword an entry, edit both the CHANGELOG.md diff and the description of the release PR (the description becomes the release notes) just before merging it, since the next push to `main` regenerates them.
+
+**Signing.** There is no Developer ID, so `Scripts/package-release.sh` archives the Release configuration with `CODE_SIGN_IDENTITY=-` (ad hoc), which signs the app and its nested code and resource bundles inside out with `Verbatim.entitlements` and Hardened Runtime; without a signature App Sandbox would not apply. It needs no Team ID or secret. Before packaging it checks `codesign --verify --deep --strict`, that the signature is ad hoc with the `runtime` flag, that the signed entitlements equal `Verbatim.entitlements`, the two `Info.plist` versions and the arm64 architecture, and fails otherwise. Gatekeeper (`spctl`) rejects the app, as it does every app that is not notarized; the [README](../README.md#first-launch) explains how to open it.
+
+### First release (bootstrap)
+
+The hand-written 0.1.0 entry in CHANGELOG.md is the notes of the first release, so v0.1.0 is not made by a release PR: release-please would add a second, generated 0.1.0 entry. Instead:
+
+1. `.release-please-manifest.json` already says `0.1.0`, and `bootstrap-sha` in `release-please-config.json` makes release-please ignore the history before the release automation. Merge it to `main` with `ci:`, `docs:` or `chore:` commits only, so release-please has nothing to propose yet. Update the date in the `## [0.1.0]` heading of CHANGELOG.md if needed.
+2. In **Actions › Release › Run workflow**, choose `main` and enter `v0.1.0`. Because no v0.1.0 release exists, the build job checks that the manifest says 0.1.0 and that CHANGELOG.md has a 0.1.0 section, builds and packages `main`, then creates tag and release v0.1.0 at that commit with that section as notes, and uploads the assets.
+3. From then on release-please finds the v0.1.0 release and proposes the next version from the commits after it. `bootstrap-sha` is no longer used and can be removed later.
+
+### Retrying a failed build
+
+If the build job fails after release-please has published a release, the release exists without assets. For a passing problem (runner, network), use **Re-run failed jobs** on the failed run. Otherwise run **Actions › Release › Run workflow** on `main` with the release's tag (for example `v0.2.0`): the workflow file comes from `main`, so fixes to the workflow or runner setup apply, while the job checks out the tag, rebuilds it with a new build number and replaces any assets with `--clobber`. A problem in the app's own source or in `Scripts/package-release.sh` at that tag needs a fix on `main` and a new release instead. Build logs are attached to failed runs as an artifact.
+
+### Packaging locally
+
+```sh
+make setup
+make package                                    # version from .release-please-manifest.json, build number 1
+make package RELEASE_VERSION=0.2.0 BUILD_NUMBER=7
+```
+
+This runs `Scripts/package-release.sh` exactly as CI does and writes `build/release/Verbatim-<version>-macos-arm64.zip`, `.dmg` and `SHA256SUMS.txt`; the archive and the staged `Verbatim.app` are in `build/release/work/`. Everything in `build/` is ignored by Git.
 
 ## Signing
 
-Use automatic signing with your own development team when signed development is needed, and do not commit it. Distribution signing is not configured: release builds are not signed with a Developer ID and not notarized. The unsigned builds from `make build` do not exercise the sandbox, so test permissions with a build signed with your own development team.
+Use automatic signing with your own development team when signed development is needed, and do not commit it. Distribution signing is not configured: release builds are signed ad hoc by `make package` (see [Releasing](#releasing)), not with a Developer ID, and not notarized. The unsigned builds from `make build` do not exercise the sandbox; test permissions with `make package`'s ad-hoc signed app or a build signed with your own development team.
 
 ## Formatting and linting
 

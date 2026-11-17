@@ -2,11 +2,9 @@
 
 All notable changes to Verbatim are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). From 0.1.0 on, entries are written by [release-please](https://github.com/googleapis/release-please) from the [Conventional Commits](https://www.conventionalcommits.org/) merged since the previous release, in its release pull request; changes not yet released are listed there. Do not add an Unreleased section: release-please inserts each new version above the newest one in this file.
 
-## [Unreleased]
-
-## [0.1.0] - 2026-11-17
+## [0.1.0](https://github.com/siarhei-hrynevich/verbatim/releases/tag/v0.1.0) (2026-11-17)
 
 The first public release. Builds are for Apple Silicon Macs running macOS 15 or later, and are not signed with a Developer ID or notarized.
 
@@ -22,6 +20,3 @@ The first public release. Builds are for Apple Silicon Macs running macOS 15 or 
 - **MCP server for AI agents.** An optional, read-only Model Context Protocol server on `127.0.0.1` with a bearer token lets agents search recordings and read summaries, transcripts and tags, citing `verbatim://` links that open the Viewer at the right moment. Settings › Agents copies a ready command for Claude Code or a configuration for other agents.
 - **macOS integration.** Dock menu, menu bar recording indicator with elapsed time, Dock badge, quit confirmation during a recording, Launch at Login, and Settings for General, AI Models, Agents, Storage and About, with the open-source licenses of everything the app ships.
 - **Project.** MIT license, third-party notices, contributing guide, code of conduct, security policy, and issue and pull request templates.
-
-[Unreleased]: https://github.com/siarhei-hrynevich/verbatim/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/siarhei-hrynevich/verbatim/releases/tag/v0.1.0
