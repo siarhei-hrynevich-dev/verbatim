@@ -14,7 +14,7 @@ What exists in the code today (recording, windows, simulated state, App integrat
 
 Organize presentation under `Features/Recording`, `Features/Library`, `Features/Viewer` (the player, named after its design section), and `Features/Settings` as each feature is built. Use layer-based `Application`, `Domain`, and `Infrastructure` directories for the core and adapters. Keep composition and lifecycle integration in App and truly reused views/extensions in Shared. Avoid empty placeholder files and speculative abstractions.
 
-The `Recorder/Models` types belong logically to Domain; that location remains valid. `RecorderViewModel` receives capture, permission and storage state through injected Application contracts. Move relevant files when real feature work makes it useful, updating Xcode target membership; no immediate restructuring is required. New workflow code belongs in Application and framework adapters in Infrastructure rather than a generic Services directory. Application-wide dependencies are created in App and injected explicitly.
+The `Verbatim/Models` types belong logically to Domain; that location remains valid. `RecorderViewModel` receives capture, permission and storage state through injected Application contracts. Move relevant files when real feature work makes it useful, updating Xcode target membership; no immediate restructuring is required. New workflow code belongs in Application and framework adapters in Infrastructure rather than a generic Services directory. Application-wide dependencies are created in App and injected explicitly.
 
 Use `@MainActor @Observable` ViewModels for nontrivial presentation state and asynchronous application actions. Simple views can receive values and callbacks directly. Views and ViewModels must not instantiate infrastructure or own workflows that must survive window closure.
 
@@ -165,7 +165,7 @@ A Model Context Protocol server inside the app, so that AI agents and chats on t
 
 Dates in arguments are what the Library's date search reads (`2026-11-04`, `2026-11`, `today`) or ISO 8601 date-times; a date covers its whole day, month or year. Results give dates in ISO 8601 with the Mac's offset and times in seconds with an `hh:mm:ss` label. A mistake the agent can correct comes back as a tool error that says how (unknown id, tag or argument, no transcript yet and why). The agent's own model does the answering; the server only finds and returns text. Queries while recording still answer, by words only.
 
-**Links.** Results carry `verbatim://recording/<id>?t=<seconds>` (`RecordingLink`), which agents are told to cite. The app declares the scheme (`Recorder/Info.plist`, merged into the generated one), and `AppDelegate` opens such a link in the Viewer at that second, queuing the Viewer until the first window has appeared when a link launches the app.
+**Links.** Results carry `verbatim://recording/<id>?t=<seconds>` (`RecordingLink`), which agents are told to cite. The app declares the scheme (`Verbatim/Info.plist`, merged into the generated one), and `AppDelegate` opens such a link in the Viewer at that second, queuing the Viewer until the first window has appeared when a link launches the app.
 
 ## Storage and models (planned)
 

@@ -8,13 +8,13 @@ Recorder is a macOS 15+, arm64, Swift 6 application with a SwiftUI App lifecycle
 
 ## Recording (implemented)
 
-The Recorder window records for real. Screen, window and audio-only recording, pause and resume, permissions, file storage and preference restoration work; see [verification](VERIFICATION.md) for what has and has not been exercised on hardware.
+The Recorder window records for real. Screen, window and audio-only recording, pause and resume, permissions, file storage and preference restoration work.
 
 | Layer | Component | Responsibility |
 | --- | --- | --- |
 | Presentation | `RecorderViewModel`, `RecorderSourceSelection`, `LevelPreviewController` | Settings being edited, available sources and selection, Ready-state meters (on demand, via Check Sound), callouts. |
 | Application | `RecordingCoordinator`, `RecordingPreflight`, `RecordingContracts` | The lifecycle (single source of truth, created by App), checks before starting, and the interfaces Infrastructure implements. |
-| Domain | `Recorder/Models` | `RecordingState` transition rules, `RecordingFailure`, `RecordingConfiguration` validation, output size and disk space rules, file naming, metadata. |
+| Domain | `Verbatim/Models` | `RecordingState` transition rules, `RecordingFailure`, `RecordingConfiguration` validation, output size and disk space rules, file naming, metadata. |
 | Infrastructure | `ScreenCaptureEngine`, `LiveCaptureSession`, `CaptureSampleSink`, `MediaFileWriter`, `MicrophoneCapture`, `CaptureSourceDiscovery` | Capture and media output. |
 | Infrastructure | `FileRecordingStore`, `UserDefaultsRecordingPreferencesStore`, `SystemCapturePermissions`, `WorkspaceSystemActions` | Files and the sidecar, preferences, permissions, System Settings and Finder. |
 
@@ -304,7 +304,7 @@ The app target links WhisperKit, SQLiteVecStore, MLX, MLXLLM, MLXLMCommon, MLXEm
 
 ## Tests
 
-Swift Testing suites in `RecorderTests` cover:
+Swift Testing suites in `VerbatimTests` cover:
 
 - `Recording` validation and status serialization (`RecordingTests`).
 - Package imports (`DependencySmokeTests`).

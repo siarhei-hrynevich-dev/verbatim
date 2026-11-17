@@ -1,11 +1,11 @@
-# Recorder
+# Verbatim
 
 A native Swift 6 / SwiftUI macOS screen recorder. The Recorder window records screens, windows and audio with ScreenCaptureKit and AVFoundation, keeping microphone and system audio as separate tracks. The Library window tracks finished recordings in a local SQLite database: history, renaming, title and date search, sorting, Finder actions, removal, deletion to the Trash, and missing-file handling. The Viewer window plays recordings with AVFoundation and AVKit: video and audio-only, with seeking, volume, speed, full screen, Finder actions and recovery from missing or damaged files. The Settings window manages local Whisper models: browse, download, verify, select and remove them. Recordings are transcribed offline with the selected model, automatically when a recording ends or on request, through a durable queue that always gives way to recording; transcripts show in the Viewer in step with playback and are saved beside the media as TXT, SRT and JSON. A local language model, downloaded and selected in Settings like the Whisper models and run with MLX, summarizes each new transcript, or one on request, in batches, keeping the notes on each part. Transcripts and summaries are then indexed for search: chunks with an FTS5 full-text index, and vectors from a local multilingual embedding model, for search by meaning and words, which a local MCP server offers to AI agents on this Mac when turned on in Settings. The app also has a Dock menu, menu bar recording indicator and app icon, and Swift Testing coverage.
 
 ## Requirements
 
 - Apple Silicon Mac running macOS 15 or later.
-- Full Xcode 26 or later with Swift 6.2 and the macOS SDK, and its Metal Toolchain component, which MLX needs to compile its shaders (`make setup` installs it with `xcodebuild -downloadComponent MetalToolchain`). Verified versions are recorded in [verification](Docs/VERIFICATION.md).
+- Full Xcode 26 or later with Swift 6.2 and the macOS SDK, and its Metal Toolchain component, which MLX needs to compile its shaders (`make setup` installs it with `xcodebuild -downloadComponent MetalToolchain`).
 - Homebrew for SwiftLint (and swift-format if missing from the selected toolchain).
 
 Select your full Xcode installation using `xcode-select` if needed; accept its license and complete first launch. No development Team ID is committed.
@@ -18,7 +18,7 @@ Before writing or changing code, read [AGENTS.md](AGENTS.md), this README, the [
 
 ```sh
 make setup
-open Recorder.xcodeproj
+open Verbatim.xcodeproj
 make build
 make test
 make format
@@ -27,7 +27,7 @@ make format-check
 make check
 ```
 
-`make setup` checks Xcode and architecture, installs missing formatting/lint tools via Homebrew, and resolves packages. The checked-in `.xcodeproj` and shared Recorder scheme need no project generator. Build and test use `xcodebuild`, Debug, arm64, and signing disabled; products go into ignored `DerivedData/`. In Xcode select the Recorder scheme and My Mac, then Run. Use automatic signing with your own development team when signed development is needed. Distribution signing is not configured.
+`make setup` checks Xcode and architecture, installs missing formatting/lint tools via Homebrew, and resolves packages. The checked-in `.xcodeproj` and shared Verbatim scheme need no project generator. Build and test use `xcodebuild`, Debug, arm64, and signing disabled; products go into ignored `DerivedData/`. In Xcode select the Verbatim scheme and My Mac, then Run. Use automatic signing with your own development team when signed development is needed. Distribution signing is not configured.
 
 `make format` uses Apple's official swift-format. `make lint` runs strict SwiftLint source linting. The `unused_import` analyzer rule is configured; it additionally requires `swiftlint analyze --compiler-log-path <clean-xcodebuild-log>` because ordinary source linting cannot determine import usage. Format and lint before submitting changes.
 
@@ -40,30 +40,30 @@ Swift Package Manager is configured directly in Xcode. Exact releases are pinned
 - [mlx-swift-lm 3.31.4](https://github.com/ml-explore/mlx-swift-lm/tree/3.31.4): `MLXLLM`, `MLXEmbedders` and `MLXLMCommon`, and [mlx-swift 0.31.4](https://github.com/ml-explore/mlx-swift/tree/0.31.4): `MLX`, for running language and embedding models. Later releases need Swift tools 6.3.
 - [swift-transformers 1.4.0](https://github.com/huggingface/swift-transformers/tree/1.4.0): `Tokenizers`, which reads a language model's tokenizer from its folder.
 
-Commit `Recorder.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` when updating packages. Initial resolution needs network access for package source; tests need no network, permissions, or models, and use only temporary databases, files and media they create. No AI model weights are bundled, and they are downloaded only when the user asks in Settings. Models load only for transcribing and are released when the queue runs out. At launch the transcription queue reads its jobs from the Library's database, which is otherwise opened on first use. It uses the system `SQLite3`, the library SQLiteVecKit also links; `VectorStore` itself is not used, because it freezes an embedding dimension into the database file. Vectors are stored as BLOBs in the app's own tables and searched in memory; see [Architecture](Docs/ARCHITECTURE.md#search-index). Import smoke tests check the libraries without initializing engines.
+Commit `Verbatim.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` when updating packages. Initial resolution needs network access for package source; tests need no network, permissions, or models, and use only temporary databases, files and media they create. No AI model weights are bundled, and they are downloaded only when the user asks in Settings. Models load only for transcribing and are released when the queue runs out. At launch the transcription queue reads its jobs from the Library's database, which is otherwise opened on first use. It uses the system `SQLite3`, the library SQLiteVecKit also links; `VectorStore` itself is not used, because it freezes an embedding dimension into the database file. Vectors are stored as BLOBs in the app's own tables and searched in memory; see [Architecture](Docs/ARCHITECTURE.md#search-index). Import smoke tests check the libraries without initializing engines.
 
 Apple frameworks are supplied by the macOS SDK: ScreenCaptureKit, AVFoundation, AVKit, CoreMedia, CoreAudio, CoreML, Accelerate, and AppKit. Future features should import them where used; Swift autolinking handles framework linkage.
 
 ## Organization
 
-- `Recorder/Features/Recording`: the Recorder window (views, `RecorderViewModel`) and, under `Preview`, the sample data and scenarios for reviewing its design states.
-- `Recorder/Application`: `RecordingCoordinator`, which owns the recording lifecycle, `RecordingKnowledgeService` and `AgentServerController`, which own what AI agents can read and the MCP server, `LibraryService`, which owns the library's use cases, `ModelManager`, which owns the state of one kind of model (speech, language or embedding), `ProcessingCoordinator`, which owns the transcription queue, `SummaryCoordinator` and `TranscriptSummarizer`, which own summaries, `IndexingCoordinator` and `RecordingSearchService`, which own the search index and searching it, `AppPreferences` and `SummaryPreferences`, and the contracts Infrastructure implements, including `PlaybackService`, `ModelFileProviding`, `TranscriptionService`, `TextGenerator`, `TextEmbedder` and `SearchIndexRepository`.
-- `Recorder/Infrastructure`: capture and media output, playback, the SQLite database, recording files and thumbnails, the WhisperKit adapters (`SpeechModels`, `Transcription`), Hugging Face model downloads for language and embedding models (`LanguageModels`), the MLX adapters (`Summarization`, `Embeddings`), the search index (`Persistence`), the MCP server (`AgentServer`), preferences, permissions, login item.
-- `Recorder/Features/Library`: the Library window (views, `LibraryViewModel`) and, under `Preview`, its sample recordings, simulated search and scenarios.
-- `Recorder/Features/Viewer`: the Viewer window, the app's player (views, `ViewerViewModel`) and, under `Preview`, its sample data and scenarios.
-- `Recorder/Features/Settings`: the Settings window (views, `SettingsViewModel`, `ModelSettingsViewModel`) and, under `Preview`, sample dependencies with simulated downloads, and scenarios.
-- `Recorder/App`: the composition root (`AppComposition`) and AppKit integration: `AppDelegate` (Dock menu, quit confirmation, holder of the Recorder view model), `RecordingIndicators` (menu bar item and Dock badge while recording), `RecordingMenus`, `WindowNavigator` (opens SwiftUI windows from AppKit menus), and the Debug menu.
-- `Recorder/Shared`: design tokens (colors, icons, focus ring) and reusable components such as buttons, switches, segmented controls, callout banners and level meters.
-- `Recorder/Models`: value types and validation.
-- `Recorder/Resources`: asset catalog and future app resources.
-- `RecorderTests`: Swift Testing model and dependency smoke tests.
+- `Verbatim/Features/Recording`: the Recorder window (views, `RecorderViewModel`) and, under `Preview`, the sample data and scenarios for reviewing its design states.
+- `Verbatim/Application`: `RecordingCoordinator`, which owns the recording lifecycle, `RecordingKnowledgeService` and `AgentServerController`, which own what AI agents can read and the MCP server, `LibraryService`, which owns the library's use cases, `ModelManager`, which owns the state of one kind of model (speech, language or embedding), `ProcessingCoordinator`, which owns the transcription queue, `SummaryCoordinator` and `TranscriptSummarizer`, which own summaries, `IndexingCoordinator` and `RecordingSearchService`, which own the search index and searching it, `AppPreferences` and `SummaryPreferences`, and the contracts Infrastructure implements, including `PlaybackService`, `ModelFileProviding`, `TranscriptionService`, `TextGenerator`, `TextEmbedder` and `SearchIndexRepository`.
+- `Verbatim/Infrastructure`: capture and media output, playback, the SQLite database, recording files and thumbnails, the WhisperKit adapters (`SpeechModels`, `Transcription`), Hugging Face model downloads for language and embedding models (`LanguageModels`), the MLX adapters (`Summarization`, `Embeddings`), the search index (`Persistence`), the MCP server (`AgentServer`), preferences, permissions, login item.
+- `Verbatim/Features/Library`: the Library window (views, `LibraryViewModel`) and, under `Preview`, its sample recordings, simulated search and scenarios.
+- `Verbatim/Features/Viewer`: the Viewer window, the app's player (views, `ViewerViewModel`) and, under `Preview`, its sample data and scenarios.
+- `Verbatim/Features/Settings`: the Settings window (views, `SettingsViewModel`, `ModelSettingsViewModel`) and, under `Preview`, sample dependencies with simulated downloads, and scenarios.
+- `Verbatim/App`: the composition root (`AppComposition`) and AppKit integration: `AppDelegate` (Dock menu, quit confirmation, holder of the Recorder view model), `RecordingIndicators` (menu bar item and Dock badge while recording), `RecordingMenus`, `WindowNavigator` (opens SwiftUI windows from AppKit menus), and the Debug menu.
+- `Verbatim/Shared`: design tokens (colors, icons, focus ring) and reusable components such as buttons, switches, segmented controls, callout banners and level meters, and `AppIdentity`, which reads the bundle identifier (set only in the build settings) for log subsystems and queue labels.
+- `Verbatim/Models`: value types and validation.
+- `Verbatim/Resources`: asset catalog and future app resources.
+- `VerbatimTests`: Swift Testing model and dependency smoke tests.
 - [Software Architecture Guidelines](Docs/SOFTWARE_ARCHITECTURE_GUIDELINES.md): layer responsibilities, dependency rules, MVVM, injection, state, concurrency, and testing.
 - [Architecture](Docs/ARCHITECTURE.md): target layers and service boundaries, runtime constraints, permissions, and storage.
 - [Implementation Status](Docs/IMPLEMENTATION.md): what is implemented today and what is still simulated or missing.
 - [Swift Code Style](Docs/CODE_STYLE.md): file layout, naming, functions, control flow, comments, and review checklist.
 - [AGENTS.md](AGENTS.md): shared coding rules.
 
-Add directories only when they contain real code. Recorder/Models holds the Domain types.
+Add directories only when they contain real code. Verbatim/Models holds the Domain types.
 
 ## Recording
 

@@ -28,3 +28,11 @@ DownloadedModels/
 *.sqlite-wal
 *.sqlite3-shm
 *.sqlite3-wal
+# Release and signing artifacts (zipped builds land in the ignored build/ and DerivedData/ folders).
+*.dmg
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+*.xcarchive/
+*.xcresult/

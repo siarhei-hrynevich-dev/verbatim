@@ -1,6 +1,6 @@
 included:
-  - Recorder
-  - RecorderTests
+  - Verbatim
+  - VerbatimTests
 excluded:
   - DerivedData
   - .build

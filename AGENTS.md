@@ -8,7 +8,7 @@ Before creating or changing code, read:
 2. [Software Architecture Guidelines](Docs/SOFTWARE_ARCHITECTURE_GUIDELINES.md) for the required Lightweight Clean Architecture and MVVM rules.
 3. [Project Architecture](Docs/ARCHITECTURE.md) for project-specific boundaries, recording constraints, model lifecycle, and permissions, and [Implementation Status](Docs/IMPLEMENTATION.md) for what is actually built.
 4. [Swift Code Style](Docs/CODE_STYLE.md) for file organization, naming, readable control flow, comments, and formatting conventions.
-5. Existing code, tests, and any documentation relevant to the requested change. Check [verification](Docs/VERIFICATION.md) when investigating toolchain or build assumptions; it is a historical report, not a guarantee of current results.
+5. Existing code, tests, and any documentation relevant to the requested change.
 
 Do this before the first code edit in each task, including fixes and refactors. Do not rely only on remembered rules. If a required document is missing, inspect the available project documentation and report the gap before implementing behavior that depends on it.
 
@@ -24,7 +24,7 @@ The guidelines define general architecture policy; ARCHITECTURE.md describes its
 - Preserve standard macOS window, Dock, menu, keyboard, and accessibility conventions.
 - Use SwiftUI presentation, @Observable UI state isolated with @MainActor, and @State for local view state. Keep business logic outside views.
 - Prefer async/await and structured tasks; actors own mutable service state. Respect cancellation and Sendable boundaries. Do not default to DispatchQueue.main.async or use @unchecked Sendable without a documented necessity.
-- Use feature-based Presentation under Features and layer-based Application, Domain, and Infrastructure. App owns the composition root; Shared contains genuinely reused code. Recorder/Models is the existing Domain location; migrate affected files deliberately when needed, without unrelated refactors. Add directories only for real code and include files in the correct Xcode target.
+- Use feature-based Presentation under Features and layer-based Application, Domain, and Infrastructure. App owns the composition root; Shared contains genuinely reused code. Verbatim/Models is the existing Domain location; migrate affected files deliberately when needed, without unrelated refactors. Add directories only for real code and include files in the correct Xcode target.
 - Propagate actionable errors. Never silently discard failures. Avoid forced unwraps and force-try unless an invariant is justified in a nearby comment.
 - Avoid unnecessary dependencies, fake service methods, premature protocols and abstractions.
 - Never load WhisperKit or embedding models, run vector indexing, or start heavy processing while recording. Models load only on demand for post-processing. Do not introduce automatic model downloads at startup.
