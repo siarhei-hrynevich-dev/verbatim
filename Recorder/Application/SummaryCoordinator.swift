@@ -22,6 +22,9 @@ final class SummaryCoordinator {
         let isTranscriptionBusy: @MainActor () -> Bool
         /// The language Settings asks for right now, read when a summary starts.
         let language: @MainActor () -> SummaryLanguage
+        /// Offers the title the model proposed for a recording. The Library applies it only to a recording whose title
+        /// the user has not changed.
+        var applyGeneratedTitle: @MainActor (UUID, String) async -> Void = { _, _ in }
         var now: @Sendable () -> Date = { .now }
     }
 

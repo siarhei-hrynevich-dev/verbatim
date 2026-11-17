@@ -56,6 +56,11 @@ struct Recording: Identifiable, Codable, Equatable, Sendable {
         self.processingStatus = processingStatus
     }
 
+    /// Whether the title is still the one generated when the recording finished, so nobody has named it yet.
+    var hasDefaultTitle: Bool {
+        title == RecordingMetadata.defaultTitle(createdAt: createdAt)
+    }
+
     /// The same recording under a new title, validated like any other.
     func renamed(to newTitle: String) throws -> Recording {
         try Recording(

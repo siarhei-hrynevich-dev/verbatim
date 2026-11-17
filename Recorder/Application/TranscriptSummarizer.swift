@@ -15,6 +15,8 @@ struct TranscriptSummarizer: Sendable {
     struct Output: Equatable, Sendable {
         let text: String
         let parts: [SummaryPart]
+        /// A name for the recording. `nil` when the model gave none: a title is a bonus, never a reason to fail.
+        let title: String?
     }
 
     let generator: any TextGenerator
@@ -47,7 +49,8 @@ struct TranscriptSummarizer: Sendable {
         }
         onProgress(.combining)
         let text = try await combine(parts)
-        return Output(text: text, parts: parts)
+        let title = try await recordingTitle(for: text)
+        return Output(text: text, parts: parts, title: title)
     }
 
     // MARK: - Map
@@ -114,6 +117,26 @@ struct TranscriptSummarizer: Sendable {
             maxTokens: settings.summaryTokens
         )
     }
+
+    // MARK: - Title
+
+    /// Only cancellation propagates: a model that cannot name the recording still gave a summary.
+    private func recordingTitle(for summary: String) async throws -> String? {
+        do {
+            let reply = try await generator.generate(
+                SummaryPrompts.title(for: summary, language: language),
+                parameters: parameters(maxTokens: Self.titleTokens)
+            )
+            try Task.checkCancellation()
+            return SummaryPrompts.cleanedTitle(reply)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return nil
+        }
+    }
+
+    private static let titleTokens = 48
 
     // MARK: - Writing
 

@@ -4,6 +4,27 @@ import Testing
 @testable import Recorder
 
 struct SummaryDomainTests {
+    // MARK: - Titles
+
+    @Test(arguments: [
+        ("Budget planning", "Budget planning"),
+        ("\"Budget planning.\"", "Budget planning"),
+        ("**Title: Budget planning**\nThe recording is about...", "Budget planning"),
+        ("<think>hm</think>\n\n«Планирование бюджета»", "Планирование бюджета")
+    ])
+    func aTitleIsCleanedOfDecoration(reply: String, expected: String) {
+        #expect(SummaryPrompts.cleanedTitle(reply) == expected)
+    }
+
+    @Test func anEmptyReplyGivesNoTitle() {
+        #expect(SummaryPrompts.cleanedTitle("  \"\"  ") == nil)
+    }
+
+    @Test func aLongTitleIsCut() throws {
+        let title = try #require(SummaryPrompts.cleanedTitle(String(repeating: "word ", count: 50)))
+        #expect(title.count <= 80)
+    }
+
     // MARK: - Batching
 
     @Test func batchesKeepOrderAndFitTheBudget() {

@@ -11,9 +11,12 @@ extension SummaryCoordinator {
             try Task.checkCancellation()
             let session = try await dependencies.generation.acquireGenerator()
             sessionID = session.id
-            let summary = try await summarize(transcript, with: session)
+            let (summary, title) = try await summarize(transcript, with: session)
             setState(.saving, of: recordingID)
             try await dependencies.summaries.replaceSummary(summary)
+            if let title {
+                await dependencies.applyGeneratedTitle(recordingID, title)
+            }
             completed(recordingID)
             Self.logger.info("Summarized a recording in \(summary.parts.count) parts")
         } catch {
@@ -40,7 +43,7 @@ extension SummaryCoordinator {
     private func summarize(
         _ transcript: Transcript,
         with session: TextGenerationSession
-    ) async throws -> TranscriptSummary {
+    ) async throws -> (summary: TranscriptSummary, title: String?) {
         let recordingID = transcript.recordingID
         let (updates, continuation) = AsyncStream.makeStream(of: TranscriptSummarizer.Progress.self)
         let observer = Task { [weak self] in
@@ -62,7 +65,7 @@ extension SummaryCoordinator {
         continuation.finish()
         await observer.value
         try Task.checkCancellation()
-        return TranscriptSummary(
+        let summary = TranscriptSummary(
             recordingID: recordingID,
             modelID: session.modelID,
             language: language.code,
@@ -71,6 +74,7 @@ extension SummaryCoordinator {
             text: output.text,
             parts: output.parts
         )
+        return (summary, output.title)
     }
 
     private func apply(_ update: TranscriptSummarizer.Progress, to recordingID: UUID) {

@@ -45,6 +45,28 @@ struct SummaryCoordinatorTests {
         #expect(condition())
     }
 
+    @Test func theModelsTitleIsOfferedOnceTheSummaryIsStored() async throws {
+        let id = try await transcribedRecording()
+        var offered: [(UUID, String)] = []
+        let coordinator = SummaryCoordinator(
+            dependencies: SummaryCoordinator.Dependencies(
+                transcripts: transcripts,
+                summaries: summaries,
+                generation: provider,
+                isTranscriptionBusy: { false },
+                language: { SummaryLanguage.english },
+                applyGeneratedTitle: { offered.append(($0, $1)) }
+            )
+        )
+
+        coordinator.enqueue(id)
+        await coordinator.waitUntilSettled()
+
+        #expect(offered.map(\.0) == [id])
+        #expect(offered.first?.1.hasPrefix("summary") == true)
+        #expect(try await coordinator.summary(for: id) != nil)
+    }
+
     @Test func aSummaryIsStoredWithItsPartsAndTheJobGoes() async throws {
         let id = try await transcribedRecording()
 

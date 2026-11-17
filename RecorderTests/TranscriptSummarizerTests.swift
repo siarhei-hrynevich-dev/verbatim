@@ -55,12 +55,16 @@ struct TranscriptSummarizerTests {
         let requests = generator.read(\.requests)
         let parameters = generator.read(\.parameters)
         let preset = LanguageModelCatalog.curated[1].preset
-        #expect(requests.count == 2)
+        #expect(requests.count == 3)
         #expect(requests[0][0].content.contains("Write only in Russian"))
         #expect(requests[0][1].content.contains("[00:00:00] Microphone: word0"))
         #expect(requests[0][1].content.contains("[00:00:10] System audio: word1"))
         #expect(requests[1][1].content.contains("## 00:00:00–00:00:15\nnotes 1"))
-        #expect(parameters.map(\.maxOutputTokens) == [preset.batchNoteTokens, preset.summaryTokens])
+        // The last request names the recording, from the finished summary.
+        #expect(requests[2][0].content.hasPrefix("You name a recording"))
+        #expect(requests[2][0].content.contains("Write only in Russian"))
+        #expect(requests[2][1].content == "summary 2")
+        #expect(parameters.map(\.maxOutputTokens).prefix(2) == [preset.batchNoteTokens, preset.summaryTokens])
         #expect(parameters.allSatisfy { $0.temperature == preset.temperature && $0.topK == preset.topK })
     }
 
@@ -84,7 +88,18 @@ struct TranscriptSummarizerTests {
         let stages = generator.read(\.requests).map { $0[0].content.prefix(14) }
         #expect(output.parts.count == 6)
         #expect(stages.filter { $0.hasPrefix("You condense") }.count >= 2)
-        #expect(stages.last?.hasPrefix("You write") == true)
+        #expect(stages.dropLast().last?.hasPrefix("You write") == true)
+        #expect(stages.last?.hasPrefix("You name") == true)
+    }
+
+    @Test func aFailedTitleDoesNotFailTheSummary() async throws {
+        let transcript = SummaryFixtures.transcript(of: UUID(), lines: 1)
+        generator.update { $0.failOnTitle = true }
+
+        let output = try await summarize(transcript, batchTokens: 1_000)
+
+        #expect(output.title == nil)
+        #expect(!output.text.isEmpty)
     }
 
     @Test func aTranscriptWithoutSpeechIsRefused() async {

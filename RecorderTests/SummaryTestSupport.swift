@@ -12,6 +12,7 @@ final class FakeTextGenerator: TextGenerator {
         var failure: (any Error)?
         var replyPrefix = ""
         var holds = false
+        var failOnTitle = false
         var gate: AsyncStream<Void>.Continuation?
     }
 
@@ -52,6 +53,9 @@ final class FakeTextGenerator: TextGenerator {
             update { $0.gate = continuation }
             for await _ in stream {}
             try Task.checkCancellation()
+        }
+        if read(\.failOnTitle), messages.first?.content.hasPrefix("You name") == true {
+            throw URLError(.timedOut)
         }
         if let failure = read(\.failure) {
             throw failure

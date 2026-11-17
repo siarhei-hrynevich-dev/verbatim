@@ -136,7 +136,16 @@ extension AppComposition {
                     preferences: summaryPreferences
                 ),
                 isTranscriptionBusy: { processing.hasActiveJobs },
-                language: { summaryPreferences.language }
+                language: { summaryPreferences.language },
+                applyGeneratedTitle: { id, title in
+                    do {
+                        try await library.applyGeneratedTitle(title, to: id)
+                    } catch {
+                        SummaryCoordinator.logger.error(
+                            "Could not apply a generated title: \(String(describing: error))"
+                        )
+                    }
+                }
             )
         )
         library.addRemovalObserver(summaries)

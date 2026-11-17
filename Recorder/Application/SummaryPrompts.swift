@@ -53,6 +53,44 @@ enum SummaryPrompts {
         ]
     }
 
+    /// A short title for a recording, from its finished summary.
+    static func title(for summary: String, language: SummaryLanguage) -> [TextGenerationMessage] {
+        [
+            .system(
+                """
+                You name a recording from its summary. \(writingRule(language)) Reply with a title of at most \
+                eight words that says what the recording is about. No quotation marks, no trailing period, no \
+                explanation. Reply with the title only.
+                """
+            ),
+            .user(summary)
+        ]
+    }
+
+    /// The first line of the model's answer as a title, without the decoration models like to add. `nil` when
+    /// nothing usable is left.
+    static func cleanedTitle(_ reply: String, maxLength: Int = 80) -> String? {
+        let line = cleaned(reply)
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty }
+        guard var title = line else {
+            return nil
+        }
+        let decoration = CharacterSet(charactersIn: "\"'«»“”„*_#` ").union(.whitespaces)
+        title = title.trimmingCharacters(in: decoration)
+        if let colon = title.firstIndex(of: ":"), title[..<colon].lowercased() == "title" {
+            title = String(title[title.index(after: colon)...]).trimmingCharacters(in: decoration)
+        }
+        while title.hasSuffix(".") {
+            title.removeLast()
+        }
+        guard !title.isEmpty else {
+            return nil
+        }
+        return title.count > maxLength ? String(title.prefix(maxLength)).trimmingCharacters(in: .whitespaces) : title
+    }
+
     /// A batch's lines, one per segment, labeled by source only when the recording has more than one.
     static func transcriptLines(_ segments: ArraySlice<TranscriptSegment>, labelsSources: Bool) -> String {
         segments.map { line(for: $0, labelsSource: labelsSources) }.joined(separator: "\n")

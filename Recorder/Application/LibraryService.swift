@@ -131,6 +131,16 @@ final class LibraryService: FinishedRecordingRegistry {
         revision += 1
     }
 
+    /// Names a recording with a generated title, unless the user named it first. Checked against the stored title at
+    /// the moment of the change, so a rename made while the title was being written always wins. A recording that
+    /// has left the Library is ignored.
+    func applyGeneratedTitle(_ title: String, to id: UUID) async throws {
+        guard let recording = try await repository.fetch(id: id), recording.recording.hasDefaultTitle else {
+            return
+        }
+        try await rename(id, to: title)
+    }
+
     /// Replaces the recording's tags. Setting what it already has changes nothing and leaves `revision` alone.
     func setTags(_ tagIDs: Set<UUID>, for id: UUID) async throws {
         let recording = try await existingRecording(id)

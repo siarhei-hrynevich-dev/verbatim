@@ -335,3 +335,28 @@ private struct PreparedDestination: RecordingDestinationStore {
     func useFolder(_ url: URL) async throws {}
     func useDefaultFolder() async {}
 }
+
+// MARK: - Generated titles
+
+extension LibraryServiceTests {
+    @Test func aGeneratedTitleReplacesTheDefaultOne() async throws {
+        let createdAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let recording = try await stored(
+            environment.makeRecording(title: RecordingMetadata.defaultTitle(createdAt: createdAt), createdAt: createdAt)
+        )
+
+        try await service.applyGeneratedTitle("Budget planning", to: recording.id)
+
+        #expect(try await repository.fetch(id: recording.id)?.recording.title == "Budget planning")
+    }
+
+    @Test func aGeneratedTitleNeverReplacesOneTheUserChose() async throws {
+        let recording = try await stored()
+        let revision = service.revision
+
+        try await service.applyGeneratedTitle("Budget planning", to: recording.id)
+
+        #expect(try await repository.fetch(id: recording.id)?.recording.title == "Demo")
+        #expect(service.revision == revision)
+    }
+}
