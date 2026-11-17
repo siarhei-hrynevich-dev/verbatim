@@ -40,7 +40,8 @@ struct RemoveModelSheet<Model: InstallableModel>: View {
     }
 }
 
-/// Third-party components and their licenses; each row opens the full text.
+/// Third-party components and their licenses; each row opens the full text, and Full Notices opens
+/// THIRD_PARTY_NOTICES.md.
 struct LicensesSheet: View {
     let licenses: [ThirdPartyLicense]
     let done: () -> Void
@@ -52,36 +53,47 @@ struct LicensesSheet: View {
             Text("Open-Source Licenses")
                 .font(.system(size: 13, weight: .bold))
                 .accessibilityAddTraits(.isHeader)
-            VStack(spacing: 0) {
-                ForEach(Array(licenses.enumerated()), id: \.element.id) { index, license in
-                    if index > 0 {
-                        GroupedDivider(leadingInset: 12)
-                    }
-                    Button {
-                        if let url = license.url {
-                            openURL(url)
+            // The list outgrows a small screen, so it scrolls past about thirteen rows.
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(Array(licenses.enumerated()), id: \.element.id) { index, license in
+                        if index > 0 {
+                            GroupedDivider(leadingInset: 12)
                         }
-                    } label: {
-                        HStack(spacing: 10) {
-                            Text(license.name)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Text(license.license)
-                                .foregroundStyle(VerbatimColor.secondaryText)
-                            IconView(.chevronRight, size: 11)
-                                .foregroundStyle(VerbatimColor.secondaryText)
+                        Button {
+                            if let url = license.url {
+                                openURL(url)
+                            }
+                        } label: {
+                            HStack(spacing: 10) {
+                                Text(license.name)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Text(license.license)
+                                    .foregroundStyle(VerbatimColor.secondaryText)
+                                IconView(.chevronRight, size: 11)
+                                    .foregroundStyle(VerbatimColor.secondaryText)
+                            }
+                            .font(.system(size: 12))
+                            .padding(.horizontal, 12)
+                            .frame(height: 32)
+                            .contentShape(Rectangle())
                         }
-                        .font(.system(size: 12))
-                        .padding(.horizontal, 12)
-                        .frame(height: 32)
-                        .contentShape(Rectangle())
+                        .buttonStyle(LicenseRowButtonStyle())
+                        .accessibilityHint("Opens the full license text in your browser")
                     }
-                    .buttonStyle(LicenseRowButtonStyle())
-                    .accessibilityHint("Opens the full license text in your browser")
                 }
             }
+            .frame(maxHeight: 416)
             .background(VerbatimColor.groupBackground, in: RoundedRectangle(cornerRadius: 8))
             .hairlineBorder(cornerRadius: 8)
             HStack {
+                if let noticesURL = ThirdPartyLicense.noticesURL {
+                    Button("Full Notices") {
+                        openURL(noticesURL)
+                    }
+                    .buttonStyle(.verbatim(.secondary, size: .dialog))
+                    .accessibilityHint("Opens every copyright notice and license text in your browser")
+                }
                 Spacer(minLength: 0)
                 Button(action: done) {
                     Text("Done")

@@ -50,7 +50,7 @@ struct AboutSettingsView: View {
     @ViewBuilder
     private var sourceCodeRow: some View {
         let row = linkRow(icon: .code, title: "Source Code on GitHub") {
-            Text(verbatim: "github.com/verbatim-app/verbatim")
+            Text(verbatim: "github.com/siarhei-hrynevich/verbatim")
                 .font(.system(size: 12))
                 .foregroundStyle(VerbatimColor.secondaryText)
             IconView(.externalLink, size: 11)

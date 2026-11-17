@@ -133,6 +133,18 @@ struct SettingsViewModelTests {
 
     @Test func shippedLicensesAllLinkToTheirText() {
         #expect(ThirdPartyLicense.shipped.allSatisfy { $0.url != nil })
+        #expect(ThirdPartyLicense.noticesURL?.lastPathComponent == "THIRD_PARTY_NOTICES.md")
+    }
+
+    @Test func shippedLicensesHaveUniqueNames() {
+        let names = ThirdPartyLicense.shipped.map(\.name)
+        #expect(Set(names).count == names.count)
+    }
+
+    @Test func shippedLicensesOmitPackagesThatAreOnlyResolved() {
+        let names = Set(ThirdPartyLicense.shipped.map(\.name))
+        #expect(names.isDisjoint(with: ["swift-argument-parser", "swift-asn1", "swift-syntax"]))
+        #expect(names.isSuperset(of: ["sqlite-vec", "MLX", "swift-jinja", "Multilingual E5 models"]))
     }
 
     // MARK: - Design scenarios

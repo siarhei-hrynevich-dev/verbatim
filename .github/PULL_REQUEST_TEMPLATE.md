@@ -10,6 +10,6 @@
 
 - [ ] `make check` passes (format-check, lint, Xcode build and tests).
 - [ ] Tests cover the change and need no models, network, capture permissions, microphones or personal files.
-- [ ] Documentation is updated where behavior or architecture changed (README, `Docs/`, `THIRD_PARTY_NOTICES.md` for package changes).
+- [ ] Documentation is updated where behavior or architecture changed (README, `Docs/`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md` for package changes).
 - [ ] No secrets, signing team identifiers, recordings, transcripts, model weights or other personal data are included, in code or screenshots.
 - [ ] Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat: …`, `fix: …`, `chore: …`).

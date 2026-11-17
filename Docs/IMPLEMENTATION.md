@@ -207,7 +207,7 @@ Summaries of transcripts written by a local language model. The design is in [AR
 
 **Viewer.** The side panel switches between Transcript and Summary. The summary renders inline Markdown and can be selected and copied, with each part's notes below; selecting a part's time plays from there.
 
-**Limits.** Jobs are not kept across launches. A transcription asked for while a summary runs can overlap it in memory. The models' quality on a given language is not checked by the app. Prompt editing is not offered. Summaries are not written as files beside the media and are not exported. A real-model check is opt-in (`SummaryEndToEndTests`, see the README).
+**Limits.** Jobs are not kept across launches. A transcription asked for while a summary runs can overlap it in memory. The models' quality on a given language is not checked by the app. Prompt editing is not offered. Summaries are not written as files beside the media and are not exported. A real-model check is opt-in (`SummaryEndToEndTests`, see [Development](DEVELOPMENT.md#end-to-end-tests-with-real-models)).
 
 ## Search index (implemented)
 
@@ -230,7 +230,7 @@ Every recording's transcript and summary are indexed for search by meaning and b
 
 **Recovery.** Jobs live in memory. At launch, and when the model changes, `search_index_state` and missing vectors show what to queue again. A recording that leaves the Library keeps its index until the next launch, or loses it at once when deleted to the Trash, like a transcript.
 
-**Limits.** No window searches the index yet; AI agents do, through the [MCP server](#mcp-server-implemented). Index progress is not shown in Settings. Search is exact rather than approximate, which is fast enough for thousands of hours. A real-model check is opt-in (`EmbeddingEndToEndTests`, see the README).
+**Limits.** No window searches the index yet; AI agents do, through the [MCP server](#mcp-server-implemented). Index progress is not shown in Settings. Search is exact rather than approximate, which is fast enough for thousands of hours. A real-model check is opt-in (`EmbeddingEndToEndTests`, see [Development](DEVELOPMENT.md#end-to-end-tests-with-real-models)).
 
 ## MCP server (implemented)
 
@@ -263,7 +263,7 @@ AI agents and chats on this Mac can search and read recordings through a Model C
 
 **Storage.** The recordings folder and its free space, the number and size of tracked recordings, and the space models use, all real. Change… goes through `RecorderViewModel`, as the Recorder's footer does, so both show the same folder and existing recordings stay where they are.
 
-**About.** Version and build from the bundle. The licenses list names what the app actually ships, and each row opens its published text.
+**About.** Version and build from the bundle, and a link to the source code on GitHub. The licenses list names what the app actually ships, as in THIRD_PARTY_NOTICES.md: the linked packages, the code vendored inside them, and the models it can download; packages that are only resolved are left out. Each row opens its published text, and Full Notices opens the repository's THIRD_PARTY_NOTICES.md.
 
 **Semantic Search.** The embedding model catalog, with the same download, select and remove actions as the other catalogs. See [Search index](#search-index-implemented).
 
@@ -329,7 +329,7 @@ Swift Testing suites in `VerbatimTests` cover:
 - The queue with inference replaced: lifecycle, duplicates, order, models (`ProcessingCoordinatorTests`), failures, cancelling, re-transcribing, leaving the Library (`ProcessingFailureTests`), restarts, recording priority, automatic queuing (`ProcessingRecoveryTests`).
 - The real decoder and chunker on media written for the test: layout, offsets, silence, bounded blocks, chunk order (`RecordingAudioReaderTests`).
 - The Viewer and Library on real jobs: display, highlight and seeking, following, export, status and actions (`TranscriptPresentationTests`).
-- Real recognition with a model on this Mac, off unless asked for, as described in the [README](../README.md#transcription) (`WhisperEndToEndTests`).
+- Real recognition with a model on this Mac, off unless asked for, as described in [Development](DEVELOPMENT.md#end-to-end-tests-with-real-models) (`WhisperEndToEndTests`).
 - Summary rules: batching, settings ranges and presets, the catalog, out-of-date summaries, cleaning replies (`SummaryDomainTests`); batching and combining with generation replaced (`TranscriptSummarizerTests`); the queue on real databases: storing, failures, recording priority, waiting for transcription, cancelling, removal (`SummaryCoordinatorTests`); the tables (`SQLiteSummaryRepositoryTests`); presets, customizing, resetting, stored settings and the Settings view model (`SummarySettingsTests`); the language model folder on real files (`LanguageModelFileStoreTests`); the generic model lifecycle on the language catalog (`LanguageModelManagerTests`); a real model downloaded and run, off unless asked for (`SummaryEndToEndTests`); queuing a summary after transcription and telling indexing (`SummaryCoordinatorTests`).
 - Search rules: chunking transcripts and summaries, rank fusion, full-text expressions, the vector matrix and its stored form (`SearchIndexDomainTests`); the index on real databases: outdated recordings, full-text search in Russian and English, nearest vectors with date and tag filters, replaced chunks and their vectors, other models' vectors, removed recordings (`SQLiteSearchIndexRepositoryTests`); the indexing queue with a fake embedder: chunking and embedding, waiting for transcription and summaries, catching up once a model is ready, summaries without embedding the transcript again, recording priority, failures, removal; and hybrid search with and without a model and while recording (`IndexingCoordinatorTests`); a real embedding model downloaded and run, off unless asked for (`EmbeddingEndToEndTests`).
 - The MCP server: links, settings, tokens and the HTTP reader (`RecordingLinkTests`, `AgentServerSettingsTests`, `HTTPRequestParserTests`); what agents read on real databases: listing with filters and pages, unknown tags, where each step stands, summaries, transcript windows, cuts and reading around a search result, search by tag (`RecordingKnowledgeServiceTests`); the endpoint: token, host and origin checks, methods, version negotiation, notifications, errors and every tool's results (`MCPEndpointTests`); the controller with a fake host: first launch, on and off, quick changes, new port and token, failures and retry, stored settings, the Settings tab (`AgentServerControllerTests`); the real server on a free loopback port and a port in use (`MCPHTTPServerTests`).

@@ -4,7 +4,7 @@
 
 Before creating or changing code, read:
 
-1. [README.md](README.md) for setup, commands, and current implementation status.
+1. [Development](Docs/DEVELOPMENT.md) for setup, toolchain, commands, dependencies, project organization and end-to-end tests, and [README.md](README.md) for the product overview.
 2. [Software Architecture Guidelines](Docs/SOFTWARE_ARCHITECTURE_GUIDELINES.md) for the required Lightweight Clean Architecture and MVVM rules.
 3. [Project Architecture](Docs/ARCHITECTURE.md) for project-specific boundaries, recording constraints, model lifecycle, and permissions, and [Implementation Status](Docs/IMPLEMENTATION.md) for what is actually built.
 4. [Swift Code Style](Docs/CODE_STYLE.md) for file organization, naming, readable control flow, comments, and formatting conventions.
