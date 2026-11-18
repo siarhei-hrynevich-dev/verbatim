@@ -96,8 +96,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/huggingface/swift-jinja.git",
       "state" : {
-        "revision" : "a091d6ae559ee97e904a0f3c2890b21949d0306f",
-        "version" : "3.0.0"
+        "revision" : "66042420a9225c98ea9382d705e2285769dfdbe5",
+        "version" : "3.1.0"
       }
     },
     {
