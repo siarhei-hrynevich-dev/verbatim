@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Thanks for reporting a bug. Please search existing issues first.
-        Security problems must not be reported here: follow the [Security Policy](https://github.com/siarhei-hrynevich/verbatim/security/policy) instead.
+        Security problems must not be reported here: follow the [Security Policy](https://github.com/siarhei-hrynevich-dev/verbatim/security/policy) instead.
         Do not attach real recordings, transcripts, or anything else containing personal data.
   - type: textarea
     id: description

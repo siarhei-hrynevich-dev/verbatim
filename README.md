@@ -2,8 +2,8 @@
 
 **A private screen recorder for macOS that transcribes, summarizes and searches your recordings on your Mac.**
 
-[![CI](https://github.com/siarhei-hrynevich/verbatim/actions/workflows/ci.yml/badge.svg)](https://github.com/siarhei-hrynevich/verbatim/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/siarhei-hrynevich/verbatim)](https://github.com/siarhei-hrynevich/verbatim/releases/latest)
+[![CI](https://github.com/siarhei-hrynevich-dev/verbatim/actions/workflows/ci.yml/badge.svg)](https://github.com/siarhei-hrynevich-dev/verbatim/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/siarhei-hrynevich-dev/verbatim)](https://github.com/siarhei-hrynevich-dev/verbatim/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform: macOS 15+ on Apple Silicon](https://img.shields.io/badge/platform-macOS%2015%2B%20%C2%B7%20Apple%20Silicon-lightgrey.svg)](#requirements)
 
@@ -48,7 +48,7 @@ Screenshots are coming. The expected images are listed in [Docs/Images](Docs/Ima
 
 ## Install
 
-1. From the [latest release](https://github.com/siarhei-hrynevich/verbatim/releases/latest), download `Verbatim-<version>-macos-arm64.dmg` (or the `.zip`) and `SHA256SUMS.txt`. Download Verbatim only from this repository's Releases page. Builds are for Apple Silicon only.
+1. From the [latest release](https://github.com/siarhei-hrynevich-dev/verbatim/releases/latest), download `Verbatim-<version>-macos-arm64.dmg` (or the `.zip`) and `SHA256SUMS.txt`. Download Verbatim only from this repository's Releases page. Builds are for Apple Silicon only.
 2. Verify the download against the checksums published with the release:
 
    ```sh
@@ -56,7 +56,7 @@ Screenshots are coming. The expected images are listed in [Docs/Images](Docs/Ima
    shasum -a 256 -c SHA256SUMS.txt --ignore-missing
    ```
 
-   It must print `OK` for the file you downloaded. Optionally, check that GitHub Actions built it from this repository with the [GitHub CLI](https://cli.github.com): `gh attestation verify Verbatim-<version>-macos-arm64.dmg --repo siarhei-hrynevich/verbatim`.
+   It must print `OK` for the file you downloaded. Optionally, check that GitHub Actions built it from this repository with the [GitHub CLI](https://cli.github.com): `gh attestation verify Verbatim-<version>-macos-arm64.dmg --repo siarhei-hrynevich-dev/verbatim`.
 3. Open the DMG, or the `Verbatim` folder from the zip, and move **Verbatim** to your Applications folder. `LICENSE` and `THIRD_PARTY_NOTICES.md` beside it are the licenses of Verbatim and the open-source software it includes.
 
 ### First launch
@@ -103,7 +103,7 @@ What an agent reads goes to the model it uses, which may be a cloud service.
 You need an Apple Silicon Mac with macOS 15 or later, full Xcode 26 or later with the Metal Toolchain component, and Homebrew.
 
 ```sh
-git clone https://github.com/siarhei-hrynevich/verbatim.git
+git clone https://github.com/siarhei-hrynevich-dev/verbatim.git
 cd verbatim
 make setup   # checks Xcode, installs SwiftLint and swift-format, resolves packages
 make check   # format-check, lint, Xcode build and tests

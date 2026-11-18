@@ -26,7 +26,7 @@ struct ThirdPartyLicense: Identifiable, Sendable {
 
     /// The full notices, with every copyright line and license text, in the repository.
     static let noticesURL = URL(
-        string: "https://github.com/siarhei-hrynevich/verbatim/blob/main/THIRD_PARTY_NOTICES.md"
+        string: "https://github.com/siarhei-hrynevich-dev/verbatim/blob/main/THIRD_PARTY_NOTICES.md"
     )
 
     /// What the app actually ships: the packages it links, the code vendored inside them, and the weights it can
@@ -154,7 +154,7 @@ struct AppMetadata: Equatable, Sendable {
     init(version: String, build: String) {
         self.version = version
         self.build = build
-        sourceCodeURL = URL(string: "https://github.com/siarhei-hrynevich/verbatim")
+        sourceCodeURL = URL(string: "https://github.com/siarhei-hrynevich-dev/verbatim")
     }
 
     init(infoDictionary: [String: Any]) {

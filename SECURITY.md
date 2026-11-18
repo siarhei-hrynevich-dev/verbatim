@@ -55,7 +55,7 @@ Verbatim records the screen and audio and keeps everything on the Mac. The point
 - Each zip and DMG has a signed build provenance attestation that ties it to the workflow run and commit that built it. Verify it with the GitHub CLI:
 
   ```sh
-  gh attestation verify Verbatim-<version>-macos-arm64.dmg --repo siarhei-hrynevich/verbatim
+  gh attestation verify Verbatim-<version>-macos-arm64.dmg --repo siarhei-hrynevich-dev/verbatim
   ```
 
 ### Out of scope

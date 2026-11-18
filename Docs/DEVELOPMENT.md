@@ -82,7 +82,7 @@ The build job runs in the same workflow run because a tag or release created wit
 - `Verbatim-X.Y.Z-macos-arm64.dmg`: a `Verbatim X.Y.Z` volume with the same three items and an `Applications` link.
 - `SHA256SUMS.txt`: SHA-256 checksums of the zip and the DMG, checkable with `shasum -a 256 -c SHA256SUMS.txt`.
 
-The zip and the DMG also get a signed [build provenance attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations), which anyone can check with `gh attestation verify <file> --repo siarhei-hrynevich/verbatim`.
+The zip and the DMG also get a signed [build provenance attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations), which anyone can check with `gh attestation verify <file> --repo siarhei-hrynevich-dev/verbatim`.
 
 **Versions.** The release tag is the source of truth. `make package` passes it to `xcodebuild` as `MARKETING_VERSION` (`CFBundleShortVersionString`), and the workflow run number as `CURRENT_PROJECT_VERSION` (`CFBundleVersion`). The `MARKETING_VERSION` in `project.pbxproj` is not bumped and is only what development builds show: release-please could edit it only through `x-release-please-version` comments, which Xcode drops whenever it rewrites the project file, so the release PR would silently stop updating it. release-please keeps the version in `.release-please-manifest.json` instead, which `make package` uses by default.
 

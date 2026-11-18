@@ -4,7 +4,7 @@ All notable changes to Verbatim are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). From 0.1.0 on, entries are written by [release-please](https://github.com/googleapis/release-please) from the [Conventional Commits](https://www.conventionalcommits.org/) merged since the previous release, in its release pull request; changes not yet released are listed there. Do not add an Unreleased section: release-please inserts each new version above the newest one in this file.
 
-## [0.1.0](https://github.com/siarhei-hrynevich/verbatim/releases/tag/v0.1.0) (2026-11-17)
+## [0.1.0](https://github.com/siarhei-hrynevich-dev/verbatim/releases/tag/v0.1.0) (2026-11-17)
 
 The first public release. Builds are for Apple Silicon Macs running macOS 15 or later, and are not signed with a Developer ID or notarized.
 

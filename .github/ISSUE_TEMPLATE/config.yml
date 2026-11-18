@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/siarhei-hrynevich/verbatim/security/policy
+    url: https://github.com/siarhei-hrynevich-dev/verbatim/security/policy
     about: Please report security problems privately, as described in the Security Policy, not in a public issue.
